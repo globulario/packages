@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "resource",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/resource_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/resource_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-resource.service",
+  "health_check_unit": "globular-resource.service",
+  "entrypoint_checksum": "sha256:783ca414bce725024a53bbeaca9d3c47c07f03d2eb88258c80e1cd35acbe96cb"
+}

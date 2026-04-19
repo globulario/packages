@@ -1,0 +1,24 @@
+{
+  "type": "infrastructure",
+  "name": "sidekick",
+  "version": "7.0.0",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/sidekick",
+  "defaults": {
+    "configDir": "config/sidekick",
+    "spec": "specs/sidekick_service.yaml"
+  },
+  "description": "MinIO Sidekick load balancer for distributing S3 requests across storage nodes.",
+  "keywords": [
+    "sidekick",
+    "minio",
+    "load-balancer",
+    "s3",
+    "proxy"
+  ],
+  "license": "AGPL-3.0",
+  "systemd_unit": "globular-sidekick.service",
+  "health_check_unit": "globular-sidekick.service",
+  "entrypoint_checksum": "sha256:e9290987fd41002cba72eec26d299a16d5c8950fca00ab30597b68c87f202de3"
+}

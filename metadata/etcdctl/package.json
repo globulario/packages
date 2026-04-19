@@ -1,0 +1,22 @@
+{
+  "type": "command",
+  "name": "etcdctl",
+  "version": "3.5.14",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/etcdctl",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/etcdctl_cmd.yaml"
+  },
+  "description": "CLI client for etcd — inspects keys, manages cluster membership, and creates snapshots.",
+  "keywords": [
+    "etcdctl",
+    "etcd",
+    "cli",
+    "cluster-management",
+    "snapshot"
+  ],
+  "license": "Apache-2.0",
+  "entrypoint_checksum": "sha256:03477c42e0630150369b04766077497bfbd42f32ebf5aa6fb1098bd335241c06"
+}

@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "conversation",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/conversation_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/conversation_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-conversation.service",
+  "health_check_unit": "globular-conversation.service",
+  "entrypoint_checksum": "sha256:8eefd26b5c3a36e45830a7a21f5cc5075a2224ee7276c8da0c172ad76bb27052"
+}

@@ -1,0 +1,28 @@
+{
+  "type": "infrastructure",
+  "name": "scylladb",
+  "version": "2025.3.8",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/noop",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/scylladb_service.yaml",
+    "scriptsDir": "scripts"
+  },
+  "description": "High-performance NoSQL database (Cassandra-compatible) for persistent service data.",
+  "keywords": [
+    "scylladb",
+    "database",
+    "nosql",
+    "cassandra",
+    "persistence"
+  ],
+  "license": "AGPL-3.0",
+  "provides_capabilities": [
+    "local-db"
+  ],
+  "health_check_unit": "scylla-server.service",
+  "health_check_port": 9042,
+  "entrypoint_checksum": "sha256:99d0ea108a6000e0481c6cdb92f77dc9c19c9c47bdba74b4720b375daffc2612"
+}

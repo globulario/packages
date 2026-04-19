@@ -1,0 +1,19 @@
+{
+  "type": "service",
+  "name": "cluster-doctor",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/cluster_doctor_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/cluster_doctor_service.yaml"
+  },
+  "profiles": [
+    "control-plane"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-cluster-doctor.service",
+  "health_check_unit": "globular-cluster-doctor.service",
+  "entrypoint_checksum": "sha256:42d4f82f9e22778dafe46f0d6fe61c464c89124aeb6dcf0d7d9a387b9a4c3ae4"
+}

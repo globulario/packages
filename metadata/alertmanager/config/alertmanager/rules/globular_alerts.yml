@@ -1,0 +1,235 @@
+# Globular Prometheus Alerting Rules
+# These rules detect resource-threatening patterns across all services.
+# Alerts fire as Prometheus alerts — the watcher can scrape them via
+# the monitoring service's Alerts() endpoint.
+
+groups:
+  # ---- Layer 0: Resource Protection ----
+  # Detect patterns that threaten CPU/memory before they kill the node.
+
+  - name: globular_resource_protection
+    rules:
+      # Circular call storm: a single method's RPS spikes above 100/s.
+      # Normal service methods rarely exceed 10-20 req/s sustained.
+      # A circular A->B->C->A loop drives one method to thousands/s.
+      - alert: CallStorm
+        expr: sum(rate(grpc_server_handled_total{job="globular"}[1m])) by (grpc_method, grpc_service, instance) > 100
+        for: 30s
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "{{ $labels.grpc_service }}/{{ $labels.grpc_method }} at {{ $value | printf \"%.0f\" }} req/s on {{ $labels.instance }}"
+          description: "Sustained >100 req/s on a single method for 30s. Probable circular call or event storm."
+
+      # Call-depth rejections: any ResourceExhausted errors appearing.
+      # These come from the call-depth circuit breaker (depth > 10).
+      # Even one means a circular call chain exists.
+      - alert: CallDepthExceeded
+        expr: sum(rate(grpc_server_handled_total{job="globular",grpc_code="ResourceExhausted"}[1m])) by (grpc_service, instance) > 0
+        for: 10s
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "{{ $labels.grpc_service }} returning ResourceExhausted on {{ $labels.instance }}"
+          description: "Call-depth circuit breaker is firing. A circular service call chain is active."
+
+      # Correlated RPS spike: 3+ services spike simultaneously.
+      # Normal traffic doesn't cause all services to spike at once.
+      # A circular call chain does.
+      - alert: CorrelatedSpike
+        expr: count(sum(rate(grpc_server_handled_total{job="globular"}[1m])) by (grpc_service, instance) > 50) > 3
+        for: 30s
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "{{ $value }} services above 50 req/s simultaneously"
+          description: "Multiple services spiking together. Probable cascading or circular call pattern."
+
+  # ---- Layer 1: Convergence Health ----
+  # Detect when the reconciliation loop is stalled or thrashing.
+
+  - name: globular_convergence
+    rules:
+      # Service down: gRPC method handling has stopped entirely.
+      # If a service stops responding, reconciliation can't converge.
+      - alert: ServiceDown
+        expr: up{job="globular"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          layer: convergence
+        annotations:
+          summary: "{{ $labels.instance }} ({{ $labels.job }}) is down"
+          description: "Prometheus cannot scrape this service. It may have crashed or is not running."
+
+      # Error rate spike: >30% of requests failing on a service.
+      # A service returning errors can't converge state.
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(grpc_server_handled_total{grpc_code!="OK"}[5m])) by (grpc_service, instance)
+            /
+            sum(rate(grpc_server_handled_total[5m])) by (grpc_service, instance)
+          ) > 0.3
+        for: 2m
+        labels:
+          severity: warning
+          layer: convergence
+        annotations:
+          summary: "{{ $labels.grpc_service }} error rate {{ $value | printf \"%.0f%%\" }} on {{ $labels.instance }}"
+          description: "More than 30% of requests are failing. Service may be unable to reconcile state."
+
+      # Latency explosion: p99 > 10s means something is stuck or deadlocked.
+      - alert: LatencyExplosion
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(grpc_server_handling_seconds_bucket[5m])) by (grpc_service, instance, le)
+          ) > 10
+        for: 2m
+        labels:
+          severity: warning
+          layer: convergence
+        annotations:
+          summary: "{{ $labels.grpc_service }} p99 latency {{ $value | printf \"%.1fs\" }} on {{ $labels.instance }}"
+          description: "p99 latency above 10 seconds. Service may be deadlocked or waiting on a circular dependency."
+
+  # ---- Infrastructure: etcd, ScyllaDB, MinIO ----
+  # These back the state layers. If they fail, nothing converges.
+
+  - name: globular_infrastructure
+    rules:
+      - alert: EtcdDown
+        expr: up{job="etcd"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          layer: infrastructure
+        annotations:
+          summary: "etcd is unreachable"
+          description: "etcd stores desired state and config. All convergence stops without it."
+
+      - alert: ScyllaDown
+        expr: up{job="scylla"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          layer: infrastructure
+        annotations:
+          summary: "ScyllaDB is unreachable"
+          description: "ScyllaDB backs persistence, AI memory, and workflow. Data operations will fail."
+
+      - alert: HighNodeCPU
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
+        for: 2m
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "Node CPU above 90% for 2 minutes"
+          description: "Sustained high CPU. If caused by a call storm, the call-depth guard should have stopped it. Check for runaway processes."
+
+      - alert: HighNodeMemory
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 2m
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "Node memory above 90%"
+          description: "Sustained high memory usage. Check for goroutine leaks or unbounded caches."
+
+  # ---- Control Plane: Leader Liveness ----
+  # Detect zombie leaders and stale heartbeat processing.
+
+  - name: globular_control_plane
+    rules:
+      - alert: LeaderHeartbeatStale
+        expr: (time() - globular_controller_last_heartbeat_processed_unix) > 180
+        for: 1m
+        labels:
+          severity: critical
+          layer: infrastructure
+        annotations:
+          summary: "Leader has not processed a heartbeat for over 3 minutes"
+          description: "The cluster controller leader is not processing ReportNodeStatus heartbeats. Nodes will appear stale. The liveness watchdog should auto-resign if a safe successor exists."
+
+      - alert: LeaderLivenessDegraded
+        expr: globular_controller_leader_liveness_degraded == 1
+        for: 30s
+        labels:
+          severity: critical
+          layer: infrastructure
+        annotations:
+          summary: "Leader liveness degraded — no safe successor to resign to"
+          description: "The leader has detected it is not processing heartbeats but cannot resign because no safe successor exists. Manual intervention may be needed."
+
+      - alert: LeaderSelfResigned
+        expr: increase(globular_controller_leader_self_resign_total[5m]) > 0
+        for: 0s
+        labels:
+          severity: warning
+          layer: infrastructure
+        annotations:
+          summary: "Leader auto-resigned due to liveness failure"
+          description: "The leader liveness watchdog triggered an automatic resignation. A new leader should be elected. Check logs for root cause."
+
+  # ---- Gateway HTTP Surface ----
+  # Detect storms, errors, and latency on the gateway's HTTP handlers
+  # (file uploads, admin API, media, config endpoints).
+
+  - name: globular_gateway_http
+    rules:
+      # HTTP request storm: >200 req/s sustained on a single path.
+      - alert: GatewayHTTPStorm
+        expr: sum(rate(gateway_http_requests_total[1m])) by (method, path) > 200
+        for: 30s
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "Gateway HTTP {{ $labels.method }} {{ $labels.path }} at {{ $value | printf \"%.0f\" }} req/s"
+          description: "Sustained >200 req/s on a single HTTP path. Possible abuse or misconfigured client."
+
+      # HTTP error rate: >30% of requests returning 4xx/5xx.
+      - alert: GatewayHTTPErrorRate
+        expr: |
+          (
+            sum(rate(gateway_http_requests_total{code=~"[45].."}[5m])) by (path)
+            /
+            sum(rate(gateway_http_requests_total[5m])) by (path)
+          ) > 0.3
+        for: 2m
+        labels:
+          severity: warning
+          layer: convergence
+        annotations:
+          summary: "Gateway HTTP {{ $labels.path }} error rate {{ $value | printf \"%.0f%%\" }}"
+          description: "More than 30% of HTTP requests to this path are failing."
+
+      # HTTP latency explosion: p99 > 10s on any path.
+      - alert: GatewayHTTPLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(gateway_http_request_duration_seconds_bucket[5m])) by (path, le)
+          ) > 10
+        for: 2m
+        labels:
+          severity: warning
+          layer: convergence
+        annotations:
+          summary: "Gateway HTTP {{ $labels.path }} p99 latency {{ $value | printf \"%.1fs\" }}"
+          description: "HTTP p99 latency above 10 seconds. Handler may be stuck or backend service unresponsive."
+
+      # Too many concurrent requests: gateway is saturated.
+      - alert: GatewayHTTPSaturation
+        expr: gateway_http_requests_in_flight > 500
+        for: 1m
+        labels:
+          severity: critical
+          layer: resource
+        annotations:
+          summary: "Gateway has {{ $value | printf \"%.0f\" }} HTTP requests in flight"
+          description: "More than 500 concurrent HTTP requests. Gateway may be overwhelmed or handlers are blocking."

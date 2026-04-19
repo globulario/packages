@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "workflow",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/workflow_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/workflow_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 900,
+  "systemd_unit": "globular-workflow.service",
+  "health_check_unit": "globular-workflow.service",
+  "entrypoint_checksum": "sha256:d5188849a54332f061a1d4d961d9aa92222875ef1c1c9033ddefd8a151e7e4fc"
+}

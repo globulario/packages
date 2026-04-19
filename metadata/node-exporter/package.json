@@ -1,0 +1,24 @@
+{
+  "type": "infrastructure",
+  "name": "node-exporter",
+  "version": "1.10.2",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/node_exporter",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/node_exporter_service.yaml"
+  },
+  "description": "Prometheus exporter for hardware and OS-level metrics (CPU, memory, disk, network).",
+  "keywords": [
+    "node-exporter",
+    "prometheus",
+    "metrics",
+    "hardware",
+    "monitoring"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-node-exporter.service",
+  "health_check_unit": "globular-node-exporter.service",
+  "entrypoint_checksum": "sha256:d468d806a3b98257d7a448f2af11a218b18c2a7a9987bb65cca480c51d1ba2df"
+}

@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "rbac",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/rbac_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/rbac_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 5,
+  "systemd_unit": "globular-rbac.service",
+  "health_check_unit": "globular-rbac.service",
+  "entrypoint_checksum": "sha256:f7dc516e29c3c225e426180058d943fc794b52b187397c119b5454a24f558cfb"
+}

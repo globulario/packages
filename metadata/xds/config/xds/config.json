@@ -1,0 +1,4 @@
+{
+  "etcd_endpoints": ["127.0.0.1:2379"],
+  "sync_interval_seconds": 5
+}

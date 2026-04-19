@@ -1,0 +1,113 @@
+version: 1
+
+metadata:
+  name: discovery
+  profiles: [core, compute, control-plane]
+  priority: 3
+
+service:
+  name: discovery
+  exec: discovery_server
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/discovery"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates must be provisioned by Day-0 bootstrap)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      # INV-PKI-1: Removed obsolete config/tls directory - all certs under pki/
+
+  - id: install-discovery-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: ensure-discovery-config
+    type: ensure_service_config
+    service_name: discovery
+    exec: discovery_server
+    address_host: auto
+    rewrite_if_out_of_range: true
+
+  - id: install-discovery-service
+    type: install_services
+    units:
+      - name: globular-discovery.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular discovery
+          After=network-online.target globular-event.service globular-rbac.service globular-resource.service
+          Wants=network-online.target globular-event.service globular-rbac.service globular-resource.service
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          WorkingDirectory={{.StateDir}}/discovery
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/discovery && chown globular:globular {{.StateDir}}/discovery'
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+          ExecStart={{.Prefix}}/bin/discovery_server
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-discovery
+    type: enable_services
+    services:
+      - globular-discovery.service
+
+  - id: start-discovery
+    type: start_services
+    services:
+      - globular-discovery.service
+    binaries:
+      globular-discovery.service: discovery_server
+
+  - id: health-discovery
+    type: health_checks
+    services:
+      - globular-discovery.service

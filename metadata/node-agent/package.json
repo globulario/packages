@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "node-agent",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/node_agent_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/node_agent_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-node-agent.service",
+  "health_check_unit": "globular-node-agent.service",
+  "entrypoint_checksum": "sha256:450f8efe7367c7c026ee33a51c02a86f23a102b8a3c521858f21fdd3ef35244b"
+}

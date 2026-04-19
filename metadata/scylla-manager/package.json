@@ -1,0 +1,24 @@
+{
+  "type": "infrastructure",
+  "name": "scylla-manager",
+  "version": "3.8.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/scylla_manager",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/scylla_manager_service.yaml"
+  },
+  "description": "ScyllaDB Manager server for automated repair, backup, and cluster management.",
+  "keywords": [
+    "scylla-manager",
+    "scylladb",
+    "repair",
+    "backup",
+    "cluster-management"
+  ],
+  "license": "Proprietary",
+  "systemd_unit": "globular-scylla-manager.service",
+  "health_check_unit": "globular-scylla-manager.service",
+  "entrypoint_checksum": "sha256:c7bdac0de53df063ca59f1c9131ce94330a6861323ee5bfc024ad57f514b3df9"
+}

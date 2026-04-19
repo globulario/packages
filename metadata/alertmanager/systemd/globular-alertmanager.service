@@ -1,0 +1,23 @@
+[Unit]
+Description=Globular Alertmanager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/alertmanager/data
+ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/alertmanager/data
+ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/alertmanager/data
+ExecStart={{.Prefix}}/bin/alertmanager \
+  --config.file={{.StateDir}}/alertmanager/alertmanager.yml \
+  --storage.path={{.StateDir}}/alertmanager/data \
+  --web.listen-address=0.0.0.0:9093 \
+  --web.external-url=http://{{.NodeIP}}:9093
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

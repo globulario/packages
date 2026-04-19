@@ -1,0 +1,11 @@
+{
+  "Domain": "localhost",
+  "Protocol": "http",
+  "PortHttp": 8080,
+  "PortHttps": 8443,
+  "DataPath": "/var/lib/globular",
+  "ConfigPath": "/etc/globular",
+  "LogLevel": "info",
+  "_comment": "Change Protocol to 'https' to enable TLS. Certificates at /var/lib/globular/config/tls/"
+}
+

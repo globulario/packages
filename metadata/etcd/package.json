@@ -1,0 +1,29 @@
+{
+  "type": "infrastructure",
+  "name": "etcd",
+  "version": "3.5.14",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/etcd",
+  "defaults": {
+    "configDir": "config/etcd",
+    "spec": "specs/etcd_service.yaml"
+  },
+  "description": "Distributed key-value store used for service configuration, leader election, and cluster coordination.",
+  "keywords": [
+    "etcd",
+    "key-value",
+    "distributed",
+    "consensus",
+    "raft",
+    "configuration"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-etcd.service",
+  "provides_capabilities": [
+    "config-store"
+  ],
+  "health_check_unit": "globular-etcd.service",
+  "health_check_port": 2379,
+  "entrypoint_checksum": "sha256:d33ec103d8c3fda726dae633b35a161fa5c342196c803ff2e2e14731182628b1"
+}

@@ -1,0 +1,22 @@
+{
+  "type": "infrastructure",
+  "name": "keepalived",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/noop",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/keepalived_service.yaml"
+  },
+  "description": "VRRP-based virtual IP failover daemon for high-availability cluster networking.",
+  "keywords": [
+    "keepalived",
+    "vrrp",
+    "failover",
+    "high-availability",
+    "vip"
+  ],
+  "license": "GPL-2.0",
+  "entrypoint_checksum": "sha256:99d0ea108a6000e0481c6cdb92f77dc9c19c9c47bdba74b4720b375daffc2612"
+}

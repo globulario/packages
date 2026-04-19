@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "authentication",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/authentication_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/authentication_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-authentication.service",
+  "health_check_unit": "globular-authentication.service",
+  "entrypoint_checksum": "sha256:c56697475c58ec4d973c7c96b50dd1a593af84223fd9c1003f8cccb27a2aede8"
+}

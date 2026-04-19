@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "mail",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/mail_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/mail_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-mail.service",
+  "health_check_unit": "globular-mail.service",
+  "entrypoint_checksum": "sha256:a4dfbe42861eedeba322c018b2e26d355516f4ebaf91a917d85796031bc112f9"
+}

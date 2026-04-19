@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "repository",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/repository_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/repository_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-repository.service",
+  "health_check_unit": "globular-repository.service",
+  "entrypoint_checksum": "sha256:93cb50a4e467b3e3b4a533d8f75a313be3b460067a1a0160e929c3bbcb497ca8"
+}

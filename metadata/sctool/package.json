@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "sctool",
+  "version": "3.8.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/sctool",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/sctool_cmd.yaml"
+  },
+  "description": "Scylla Manager CLI client for scheduling repairs, backups, and managing ScyllaDB clusters.",
+  "keywords": [
+    "sctool",
+    "scylla-manager",
+    "cli",
+    "repair",
+    "backup",
+    "scylladb"
+  ],
+  "license": "Proprietary",
+  "entrypoint_checksum": "sha256:2faf92b4263cb002bbb6d12d6c9b44e4c27ab5c6fa7b71f6a151c70fc6301b23"
+}

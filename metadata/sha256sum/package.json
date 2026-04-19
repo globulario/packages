@@ -1,0 +1,22 @@
+{
+  "type": "command",
+  "name": "sha256sum",
+  "version": "9.4.0",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/sha256sum",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/sha256sum_cmd.yaml"
+  },
+  "description": "SHA-256 checksum utility — used by backup-manager and node-agent for artifact integrity verification.",
+  "keywords": [
+    "sha256sum",
+    "checksum",
+    "integrity",
+    "verification",
+    "hash"
+  ],
+  "license": "GPL-3.0",
+  "entrypoint_checksum": "sha256:e484c36c0613879fbd11058f7a2e194783bced59d4805d64c3d4b0d7f664094d"
+}

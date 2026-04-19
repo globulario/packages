@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "sql",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/sql_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/sql_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-sql.service",
+  "health_check_unit": "globular-sql.service",
+  "entrypoint_checksum": "sha256:b56c6a2ae956e6fe99c4b8a07b7c275b41cf0e2f8aec5503524ee33d0ebd6d40"
+}

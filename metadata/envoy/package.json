@@ -1,0 +1,32 @@
+{
+  "type": "infrastructure",
+  "name": "envoy",
+  "version": "1.35.3",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/envoy",
+  "defaults": {
+    "configDir": "config/envoy",
+    "spec": "specs/envoy_service.yaml"
+  },
+  "description": "L7 edge proxy handling TLS termination, gRPC-Web translation, and dynamic service routing.",
+  "keywords": [
+    "envoy",
+    "proxy",
+    "tls",
+    "grpc-web",
+    "load-balancer",
+    "routing"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-envoy.service",
+  "provides_capabilities": [
+    "http-proxy"
+  ],
+  "runtime_local_dependencies": [
+    "xds"
+  ],
+  "health_check_unit": "globular-envoy.service",
+  "health_check_port": 8443,
+  "entrypoint_checksum": "sha256:241c1702f0ed1c0dba31339abaab422906a4295cc92640f5b832c131ee385767"
+}

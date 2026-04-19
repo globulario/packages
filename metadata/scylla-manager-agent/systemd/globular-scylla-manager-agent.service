@@ -1,0 +1,18 @@
+[Unit]
+Description=Globular Scylla Manager Agent
+After=network-online.target scylla-server.service
+Wants=network-online.target scylla-server.service
+
+[Service]
+Type=simple
+User=scylla
+Group=scylla
+SupplementaryGroups=globular
+WorkingDirectory={{.StateDir}}/scylla-manager-agent
+ExecStart={{.Prefix}}/bin/scylla_manager_agent --config-file {{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target

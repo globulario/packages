@@ -1,0 +1,19 @@
+[Unit]
+Description=Globular etcd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/etcd
+ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/etcd
+ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/etcd
+ExecStart={{.Prefix}}/bin/etcd --config-file {{.StateDir}}/config/etcd.yaml
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

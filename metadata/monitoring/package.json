@@ -1,0 +1,21 @@
+{
+  "type": "service",
+  "name": "monitoring",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/monitoring_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/monitoring_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute",
+    "control-plane"
+  ],
+  "priority": 8,
+  "systemd_unit": "globular-monitoring.service",
+  "health_check_unit": "globular-monitoring.service",
+  "entrypoint_checksum": "sha256:38e28aa1123456f5debe2204b3acf5b274a2a22778ce2cd7869acf956ded56fe"
+}

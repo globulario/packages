@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "rclone",
+  "version": "1.73.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/rclone",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/rclone_cmd.yaml"
+  },
+  "description": "Cloud storage sync tool — used by backup-manager for MinIO/S3 data transfer and replication.",
+  "keywords": [
+    "rclone",
+    "cloud-storage",
+    "s3",
+    "minio",
+    "sync",
+    "replication"
+  ],
+  "license": "MIT",
+  "entrypoint_checksum": "sha256:10ffca7640f0483beba9a9c9f4cdb6a9ca30a13c4ab31f2329d09a832802694d"
+}

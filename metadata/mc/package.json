@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "mc",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/mc",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/mc_cmd.yaml"
+  },
+  "description": "MinIO Client (mc) — CLI for managing buckets, objects, and S3-compatible storage.",
+  "keywords": [
+    "mc",
+    "minio",
+    "cli",
+    "s3",
+    "object-storage",
+    "bucket"
+  ],
+  "license": "AGPL-3.0",
+  "entrypoint_checksum": "sha256:01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891"
+}

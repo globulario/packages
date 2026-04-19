@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "ldap",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/ldap_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/ldap_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-ldap.service",
+  "health_check_unit": "globular-ldap.service",
+  "entrypoint_checksum": "sha256:10f299cc98eb22b9d7bdb814b680fb3c35c32f27e9729f8b1be3d2c68adb605e"
+}

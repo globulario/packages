@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: restic
+  version: "0.18.1"
+  kind: command
+  description: "Deduplicated encrypted backup tool — used by backup-manager for filesystem and S3 backup operations."
+  keywords: [restic, backup, deduplication, encryption, restore, snapshot]
+  license: BSD-2-Clause
+
+# restic CLI tool — used by backup-manager for filesystem/S3 backup operations.
+entrypoint: bin/restic
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install restic binary from the packaged payload
+  - id: install-restic-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/restic
+  - id: install-restic-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/restic"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/restic" "$@"

@@ -1,0 +1,19 @@
+{
+  "type": "service",
+  "name": "cluster-controller",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/cluster_controller_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/cluster_controller_service.yaml"
+  },
+  "profiles": [
+    "control-plane"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-cluster-controller.service",
+  "health_check_unit": "globular-cluster-controller.service",
+  "entrypoint_checksum": "sha256:c74fe4d2ab78ee8080ac87b03f39e6f4ec8069f8ddd3717a75852f4469f8bf49"
+}

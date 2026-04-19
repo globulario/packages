@@ -1,0 +1,150 @@
+version: 1
+
+metadata:
+  name: mcp
+  version: "0.0.3"
+  kind: infrastructure
+  description: "MCP (Model Context Protocol) server exposing read-only Globular operator tools to AI assistants like Claude Code."
+  keywords: [mcp, ai, claude, operator, diagnostics, tools]
+  license: Apache-2.0
+  entrypoint: mcp
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/mcp"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-mcp-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-mcp-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/mcp/config.json"
+        owner: globular
+        group: globular
+        mode: 0640
+        atomic: true
+        content: |
+          {
+            "enabled": true,
+            "transport": "http",
+            "read_only": false,
+            "default_timeout": "10s",
+            "tool_groups": {
+              "cluster": true,
+              "doctor": true,
+              "nodeagent": true,
+              "repository": true,
+              "backup": true,
+              "rbac": true,
+              "resource": true,
+              "composed": true,
+              "cli": true,
+              "governor": true,
+              "memory": true,
+              "skills": true,
+              "workflow": true,
+              "etcd": true,
+              "file": false,
+              "persistence": false,
+              "storage": false,
+              "auth": false,
+              "dns": false,
+              "title": true,
+              "frontend": true,
+              "proto": true,
+              "http_diag": true,
+              "monitoring": true,
+              "browser": true,
+              "ai_executor": true
+            },
+            "file_allowed_roots": [],
+            "persistence_allowed_connections": [],
+            "persistence_allowed_databases": [],
+            "persistence_allowed_collections": [],
+            "storage_allowed_connections": [],
+            "storage_allowed_key_prefixes": [],
+            "max_response_size": 1048576,
+            "max_result_count": 100,
+            "max_file_read_bytes": 32768,
+            "concurrency_limit": 10,
+            "http_listen_addr": ":10260",
+            "http_read_timeout": "30s",
+            "http_write_timeout": "1m0s",
+            "http_use_tls": true,
+            "http_tls_cert_file": "/var/lib/globular/pki/issued/services/service.crt",
+            "http_tls_key_file": "/var/lib/globular/pki/issued/services/service.key",
+            "http_advertise_host": "0.0.0.0",
+            "redact_fields": [],
+            "audit_log": true,
+            "audit_log_path": ""
+          }
+
+  - id: install-mcp-service
+    type: install_services
+    units:
+      - name: globular-mcp.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular MCP Server
+          After=network-online.target globular-etcd.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          WorkingDirectory={{.StateDir}}/mcp
+          ExecStart={{.Prefix}}/bin/mcp
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=524288
+          Environment=GLOBULAR_MCP_CONFIG={{.StateDir}}/mcp/config.json
+          Environment=GLOBULAR_BOOTSTRAP=1
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-mcp
+    type: enable_services
+    services:
+      - globular-mcp.service
+
+  # No start_services or health_checks — the MCP server starts after all
+  # dependencies (etcd, auth, etc.) are up. During Day-0, other services
+  # aren't running yet. Systemd will start it on next boot or the Day-0
+  # script starts all services together at the end.

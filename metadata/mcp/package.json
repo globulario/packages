@@ -1,0 +1,25 @@
+{
+  "type": "infrastructure",
+  "name": "mcp",
+  "version": "0.0.3",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/mcp",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/mcp_service.yaml"
+  },
+  "description": "MCP (Model Context Protocol) server exposing read-only Globular operator tools to AI assistants like Claude Code.",
+  "keywords": [
+    "mcp",
+    "ai",
+    "claude",
+    "operator",
+    "diagnostics",
+    "tools"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-mcp.service",
+  "health_check_unit": "globular-mcp.service",
+  "entrypoint_checksum": "sha256:22cc110a0fe8d4d94b3082a382a3b81263f0f6d20ff87152797077f7a3eee553"
+}

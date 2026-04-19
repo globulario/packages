@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "ai-watcher",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/ai_watcher_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/ai_watcher_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-ai-watcher.service",
+  "health_check_unit": "globular-ai-watcher.service",
+  "entrypoint_checksum": "sha256:66a0ad601d0e12ef79981db0a933c3cda3077b78d5b3ddb4c08dca9e27b48206"
+}

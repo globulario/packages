@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: ffmpeg
+  version: "7.0.2"
+  kind: command
+  description: "Media transcoding toolkit — used by the media service for video/audio conversion and thumbnail generation."
+  keywords: [ffmpeg, transcoding, video, audio, media, conversion]
+  license: LGPL-2.1
+
+# ffmpeg CLI tool — media transcoding and processing.
+entrypoint: bin/ffmpeg
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install ffmpeg binary from the packaged payload
+  - id: install-ffmpeg-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/ffmpeg
+  - id: install-ffmpeg-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/ffmpeg"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/ffmpeg" "$@"

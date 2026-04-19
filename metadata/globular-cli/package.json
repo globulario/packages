@@ -1,0 +1,22 @@
+{
+  "type": "command",
+  "name": "globular-cli",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/globularcli",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/globular_cli_cmd.yaml"
+  },
+  "description": "Globular platform CLI — bootstraps clusters, manages packages, controls services, and handles DNS.",
+  "keywords": [
+    "globularcli",
+    "cli",
+    "cluster",
+    "package-management",
+    "bootstrap"
+  ],
+  "license": "MIT",
+  "entrypoint_checksum": "sha256:72dc70404f4edfc2a99778e58f92cdd63319927a465d9461035061c15bc5f6c8"
+}

@@ -1,0 +1,21 @@
+{
+  "type": "service",
+  "name": "file",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/file_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/file_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute",
+    "storage"
+  ],
+  "priority": 7,
+  "systemd_unit": "globular-file.service",
+  "health_check_unit": "globular-file.service",
+  "entrypoint_checksum": "sha256:bab5c9ef6c2cb2226e877e63f8ba84f2849d8626b53b2276e596a649e949a0bd"
+}

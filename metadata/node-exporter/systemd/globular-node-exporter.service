@@ -1,0 +1,17 @@
+[Unit]
+Description=Globular Node Exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+ExecStart={{.Prefix}}/bin/node_exporter \
+  --web.listen-address=127.0.0.1:9100
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

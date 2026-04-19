@@ -1,0 +1,27 @@
+{
+  "type": "service",
+  "name": "xds",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/xds",
+  "defaults": {
+    "configDir": "config/xds",
+    "spec": "specs/xds_service.yaml"
+  },
+  "description": "xDS control plane that provides dynamic Envoy configuration for service discovery and routing.",
+  "keywords": [
+    "xds",
+    "envoy",
+    "service-discovery",
+    "control-plane",
+    "routing"
+  ],
+  "license": "MIT",
+  "systemd_unit": "globular-xds.service",
+  "provides_capabilities": [
+    "service-mesh"
+  ],
+  "health_check_unit": "globular-xds.service",
+  "entrypoint_checksum": "sha256:76aec6c8fb1ed1a308a586f5eee89e423882ee1a90bbe9aa421a9f6084123b7a"
+}

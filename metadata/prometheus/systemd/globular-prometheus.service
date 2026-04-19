@@ -1,0 +1,24 @@
+[Unit]
+Description=Globular Prometheus
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/prometheus/data
+ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/prometheus/data
+ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/prometheus/data
+ExecStart={{.Prefix}}/bin/prometheus \
+  --config.file={{.StateDir}}/prometheus/prometheus.yml \
+  --storage.tsdb.path={{.StateDir}}/prometheus/data \
+  --storage.tsdb.retention.time=15d \
+  --web.listen-address=0.0.0.0:9090 \
+  --web.enable-lifecycle
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "yt-dlp",
+  "version": "2026.2.21",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/yt-dlp",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/yt_dlp_cmd.yaml"
+  },
+  "description": "Video and audio downloader supporting 1000+ sites — used by the media service for content ingestion.",
+  "keywords": [
+    "yt-dlp",
+    "video",
+    "audio",
+    "downloader",
+    "media",
+    "youtube"
+  ],
+  "license": "Unlicense",
+  "entrypoint_checksum": "sha256:057098b1390e8d4931e143eb889e9bbe088f17e40a2936f31ee218909f806f5f"
+}

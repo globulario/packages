@@ -1,0 +1,22 @@
+[Unit]
+Description=Globular rbac
+After=network-online.target globular-event.service globular-resource.service scylla-server.service
+Wants=network-online.target globular-event.service globular-resource.service scylla-server.service
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+WorkingDirectory={{.StateDir}}/rbac
+Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/rbac && chown globular:globular {{.StateDir}}/rbac'
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 90); do ss -lnt | grep -q ":9042 " && exit 0; sleep 1; done; echo "scylla 9042 not ready"; exit 1'
+ExecStart={{.Prefix}}/bin/rbac_server
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

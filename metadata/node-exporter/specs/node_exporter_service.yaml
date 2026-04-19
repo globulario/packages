@@ -1,0 +1,82 @@
+version: 1
+
+metadata:
+  name: node_exporter
+  version: "1.10.2"
+  kind: infrastructure
+  description: "Prometheus exporter for hardware and OS-level metrics (CPU, memory, disk, network)."
+  keywords: [node-exporter, prometheus, metrics, hardware, monitoring]
+  license: Apache-2.0
+  entrypoint: node_exporter
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  - id: install-node-exporter-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-node-exporter-service
+    type: install_services
+    units:
+      - name: globular-node-exporter.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Node Exporter
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStart={{.Prefix}}/bin/node_exporter \
+            --web.listen-address=127.0.0.1:9100
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-node-exporter
+    type: enable_services
+    services:
+      - globular-node-exporter.service
+
+  - id: start-node-exporter
+    type: start_services
+    services:
+      - globular-node-exporter.service
+    binaries:
+      globular-node-exporter.service: node_exporter
+
+  - id: health-node-exporter
+    type: health_checks
+    services:
+      - globular-node-exporter.service

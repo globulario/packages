@@ -1,0 +1,23 @@
+[Unit]
+Description=Globular MinIO
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/minio {{.MinioDataDir}}
+ExecStartPre=+/usr/bin/chown -R globular:globular {{.StateDir}}/minio
+ExecStartPre=+/usr/bin/chown -R globular:globular {{.MinioDataDir}}
+ExecStartPre=+/usr/bin/chmod 0700 {{.StateDir}}/minio
+ExecStartPre=+/usr/bin/chmod 0700 {{.MinioDataDir}}
+ExecStartPre=/usr/bin/test -w {{.MinioDataDir}}
+EnvironmentFile=-{{.StateDir}}/minio/minio.env
+ExecStart={{.Prefix}}/bin/minio server {{.MinioDataDir}} --address {{.NodeIP}}:9000 --console-address 127.0.0.1:9001
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "storage",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/storage_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/storage_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-storage.service",
+  "health_check_unit": "globular-storage.service",
+  "entrypoint_checksum": "sha256:6e1c35eff71056b43ba2786dacdca858e2d400ea2cffa79e7b5dafa8f3d9b035"
+}

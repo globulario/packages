@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "log",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/log_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/log_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-log.service",
+  "health_check_unit": "globular-log.service",
+  "entrypoint_checksum": "sha256:8b3131f12b032ac2c10b54331a0d9eb14da7a4a15041a5a834f77296cfcbb358"
+}

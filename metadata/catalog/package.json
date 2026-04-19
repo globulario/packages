@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "catalog",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/catalog_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/catalog_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-catalog.service",
+  "health_check_unit": "globular-catalog.service",
+  "entrypoint_checksum": "sha256:fa6917093c8250e4d89b443de728c48599adf286e10e696b94743db4852715b6"
+}

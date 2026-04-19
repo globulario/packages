@@ -1,0 +1,137 @@
+version: 1
+
+metadata:
+  name: scylla_manager
+  version: "3.8.1"
+  kind: infrastructure
+  description: "ScyllaDB Manager server for automated repair, backup, and cluster management."
+  keywords: [scylla-manager, scylladb, repair, backup, cluster-management]
+  license: Proprietary
+  entrypoint: scylla_manager
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/scylla-manager"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-scylla-manager-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-scylla-manager-config-script
+    type: install_files
+    files:
+      - path: "{{.Prefix}}/bin/scylla-manager-configure"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          # Generate scylla-manager config with the correct CQL host.
+          # Reads ScyllaDB's listen address from its config; falls back
+          # to detecting the address from the listening socket.
+          CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"
+          if [ -f "$CFG" ]; then
+            exit 0   # skip if config already exists (user may have customised it)
+          fi
+          # 1) Try ScyllaDB's own config
+          SCYLLA_CFG="/etc/scylla/scylla.yaml"
+          CQL_HOST=""
+          if [ -f "$SCYLLA_CFG" ]; then
+            CQL_HOST=$(grep -E '^rpc_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d '[:space:]')
+            [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E '^listen_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d '[:space:]')
+          fi
+          # 2) Fallback: parse the listening socket
+          if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then
+            CQL_HOST=$(ss -lnt | awk '/:9042 /{split($4,a,":"); print a[1]; exit}')
+          fi
+          # 3) Ultimate fallback
+          [ -z "$CQL_HOST" ] && CQL_HOST="127.0.0.1"
+          cat > "$CFG" <<EOCONF
+          # Scylla Manager configuration (managed by Globular)
+          http: 127.0.0.1:5080
+
+          database:
+            hosts:
+              - ${CQL_HOST}
+            port: 9042
+          EOCONF
+          # Fix indentation (strip leading whitespace from heredoc)
+          sed -i 's/^          //' "$CFG"
+          chown globular:globular "$CFG"
+          chmod 0640 "$CFG"
+
+  - id: install-scylla-manager-service
+    type: install_services
+    units:
+      - name: globular-scylla-manager.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Scylla Manager
+          After=network-online.target scylla-server.service
+          Wants=network-online.target scylla-server.service
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          WorkingDirectory={{.StateDir}}/scylla-manager
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 90); do ss -lnt | grep -q ":9042 " && exit 0; sleep 1; done; echo "scylla 9042 not ready"; exit 1'
+          ExecStartPre={{.Prefix}}/bin/scylla-manager-configure
+          ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=100000
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-scylla-manager
+    type: enable_services
+    services:
+      - globular-scylla-manager.service
+
+  - id: start-scylla-manager
+    type: start_services
+    services:
+      - globular-scylla-manager.service
+    binaries:
+      globular-scylla-manager.service: scylla_manager
+
+  - id: health-scylla-manager
+    type: health_checks
+    services:
+      - globular-scylla-manager.service

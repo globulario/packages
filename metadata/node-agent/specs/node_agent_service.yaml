@@ -1,0 +1,113 @@
+version: 1
+
+metadata:
+  name: node_agent
+  profiles: [core, compute]
+  priority: 1000
+
+service:
+  name: node_agent
+  exec: node_agent_server
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/node_agent"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates must be provisioned by Day-0 bootstrap)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      # INV-PKI-1: Removed obsolete config/tls directory - all certs under pki/
+
+  - id: install-node_agent-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: ensure-node_agent-config
+    type: ensure_service_config
+    service_name: node_agent
+    exec: node_agent_server
+    address_host: auto
+    rewrite_if_out_of_range: true
+
+  - id: install-node_agent-service
+    type: install_services
+    units:
+      - name: globular-node-agent.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular node_agent
+          After=network-online.target globular-event.service globular-cluster-controller.service
+          Wants=network-online.target globular-event.service globular-cluster-controller.service
+
+          [Service]
+          Type=simple
+          User=root
+          Group=root
+          WorkingDirectory={{.StateDir}}/node_agent
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/node_agent && chown root:root {{.StateDir}}/node_agent'
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+          ExecStart={{.Prefix}}/bin/node_agent_server
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-node_agent
+    type: enable_services
+    services:
+      - globular-node-agent.service
+
+  - id: start-node_agent
+    type: start_services
+    services:
+      - globular-node-agent.service
+    binaries:
+      globular-node-agent.service: node_agent_server
+
+  - id: health-node_agent
+    type: health_checks
+    services:
+      - globular-node-agent.service

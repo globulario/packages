@@ -1,0 +1,66 @@
+version: 1
+
+metadata:
+  name: scylladb
+  version: "2025.3.8"
+  kind: infrastructure
+  description: "High-performance NoSQL database (Cassandra-compatible) for persistent service data."
+  keywords: [scylladb, database, nosql, cassandra, persistence]
+  license: AGPL-3.0
+  entrypoint: noop
+  install_bins: false
+  provides_capabilities: [local-db]
+  health_check:
+    unit: scylla-server.service
+    port: 9042
+  # Bundle .deb files at build time so install doesn't need internet access.
+  bundle_debs:
+    - scylla
+    - scylla-server
+    - scylla-conf
+    - scylla-cqlsh
+    - scylla-python3
+
+steps:
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Skip payload installation (ScyllaDB is an OS package, not a bundled binary)
+  - id: install-payload
+    type: install_package_payload
+    install_bins: false
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # CRITICAL: Prevent dpkg from auto-starting ScyllaDB during package install.
+  # ScyllaDB's first start bootstraps an irreversible Raft topology. If it starts
+  # with default config (listen_address: localhost, self-only seeds), the node
+  # becomes a standalone cluster that can NEVER join another cluster.
+  # The config must be correct BEFORE the first start.
+  - id: prevent-autostart
+    type: run_script
+    script: prevent-autostart.sh
+
+  # Install .deb packages bundled in the artifact (offline, no internet needed).
+  - id: install-scylladb-debs
+    type: install_local_debs
+
+  # Remove the autostart prevention now that dpkg is done.
+  # Post-install will handle the controlled first start.
+  - id: allow-autostart
+    type: run_script
+    script: allow-autostart.sh
+
+  # Post-install: TLS certs, data dirs, env file, config, controlled first start.
+  # This script ensures ScyllaDB data is clean and config is correct before
+  # the first start. ScyllaDB's Raft bootstrap is a one-way door.
+  - id: run-post-install
+    type: run_script
+    script: post-install.sh
+    timeout: 5m

@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "echo",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/echo_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/echo_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-echo.service",
+  "health_check_unit": "globular-echo.service",
+  "entrypoint_checksum": "sha256:91a884665a1fa8159c65b12895085074d9bfe37ce74b4cedacf4aef46b0458e6"
+}

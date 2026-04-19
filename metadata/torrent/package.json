@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "torrent",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/torrent_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/torrent_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-torrent.service",
+  "health_check_unit": "globular-torrent.service",
+  "entrypoint_checksum": "sha256:0179bd8433cf62967e4a15462a2c07a765be52aeef83809b68581c381b9656ec"
+}

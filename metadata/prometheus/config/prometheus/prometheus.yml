@@ -1,0 +1,79 @@
+# Globular Prometheus configuration
+# Scrapes all Globular gRPC services that expose /metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "/var/lib/globular/prometheus/rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["0.0.0.0:9093"]
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+  # Envoy admin stats (always on :9901)
+  - job_name: "envoy"
+    metrics_path: /stats/prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9901"]
+
+  # Node exporter (if installed, standard port :9100)
+  - job_name: "node"
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+
+  # etcd (TLS on :2379)
+  - job_name: "etcd"
+    scheme: https
+    tls_config:
+      ca_file: /var/lib/globular/pki/ca.pem
+      cert_file: /var/lib/globular/pki/issued/services/service.crt
+      key_file: /var/lib/globular/pki/issued/services/service.key
+    static_configs:
+      - targets: ["127.0.0.1:2379"]
+
+  # Sidekick proxy metrics (request counts, bytes, errors)
+  - job_name: "sidekick"
+    metrics_path: /.prometheus/metrics
+    static_configs:
+      - targets: ["127.0.0.1:8081"]
+
+  # MinIO internal metrics (buckets, S3 ops, storage)
+  # Requires MINIO_PROMETHEUS_AUTH_TYPE=public in minio.env
+  - job_name: "minio"
+    metrics_path: /minio/v2/metrics/cluster
+    scheme: https
+    tls_config:
+      ca_file: /var/lib/globular/pki/ca.pem
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ["127.0.0.1:9000"]
+
+  # ScyllaDB (plain HTTP on :9180)
+  # ScyllaDB binds to the host's listen_address, not 127.0.0.1.
+  # Replace with the node IP from: grep listen_address /etc/scylla/scylla.yaml
+  - job_name: "scylla"
+    static_configs:
+      - targets: ["REPLACE_WITH_NODE_IP:9180"]
+
+  # Globular services — file-based discovery.
+  # Each gRPC service auto-registers by writing a target file
+  # into the targets/ directory when it starts.
+  - job_name: "globular"
+    file_sd_configs:
+      - files:
+          - "/var/lib/globular/prometheus/targets/*.yaml"
+          - "/var/lib/globular/prometheus/targets/*.json"
+        refresh_interval: 30s
+    relabel_configs:
+      # Prefer the job label from the target file over the job_name
+      - source_labels: [job]
+        target_label: job

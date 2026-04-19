@@ -1,0 +1,21 @@
+{
+  "type": "service",
+  "name": "backup-manager",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/backup_manager_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/backup_manager_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute",
+    "storage"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-backup-manager.service",
+  "health_check_unit": "globular-backup-manager.service",
+  "entrypoint_checksum": "sha256:d2bfae4ce4c358e528de24131adbbd4626c014bfd536c7e52ffa81810fac9355"
+}

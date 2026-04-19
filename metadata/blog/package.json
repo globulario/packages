@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "blog",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/blog_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/blog_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-blog.service",
+  "health_check_unit": "globular-blog.service",
+  "entrypoint_checksum": "sha256:9f68b35fc23617c114782fb3964e298feeecc83a5ca8a8df459ddedf97e7f3c0"
+}

@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "ffmpeg",
+  "version": "7.0.2",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/ffmpeg",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/ffmpeg_cmd.yaml"
+  },
+  "description": "Media transcoding toolkit — used by the media service for video/audio conversion and thumbnail generation.",
+  "keywords": [
+    "ffmpeg",
+    "transcoding",
+    "video",
+    "audio",
+    "media",
+    "conversion"
+  ],
+  "license": "LGPL-2.1",
+  "entrypoint_checksum": "sha256:e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99"
+}

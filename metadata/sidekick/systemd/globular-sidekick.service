@@ -1,0 +1,23 @@
+[Unit]
+Description=Globular Sidekick (MinIO metrics proxy)
+After=globular-minio.service
+Wants=globular-minio.service
+
+[Service]
+Type=simple
+User=globular
+Group=globular
+EnvironmentFile=-{{.StateDir}}/sidekick/sidekick.env
+ExecStart={{.Prefix}}/bin/sidekick \
+  --address ${SIDEKICK_ADDRESS} \
+  --health-path ${SIDEKICK_HEALTH_PATH} \
+  --health-duration ${SIDEKICK_HEALTH_DURATION} \
+  --insecure \
+  --log \
+  ${SIDEKICK_BACKEND}
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=524288
+
+[Install]
+WantedBy=multi-user.target

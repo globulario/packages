@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "media",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/media_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/media_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-media.service",
+  "health_check_unit": "globular-media.service",
+  "entrypoint_checksum": "sha256:b13f02a20d47d449b2d3d2e54fa479cb9a0f51d1ddb143dfd115f6d4339b4ef1"
+}

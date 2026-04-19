@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "search",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/search_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/search_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-search.service",
+  "health_check_unit": "globular-search.service",
+  "entrypoint_checksum": "sha256:26876d7c3aa8e6411cf7499de5dcdc4132164d7022b43d2372bfd6d9a01de033"
+}

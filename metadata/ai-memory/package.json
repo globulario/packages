@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "ai-memory",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/ai_memory_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/ai_memory_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-ai-memory.service",
+  "health_check_unit": "globular-ai-memory.service",
+  "entrypoint_checksum": "sha256:969649ab0488474f75e42280159ff5c3e79a90bd41d6e083a871b488bb13f1a7"
+}

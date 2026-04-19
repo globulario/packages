@@ -1,0 +1,20 @@
+grpc:
+  # Envoy bootstrap defaults in your controlplane code assume xDS at 0.0.0.0:18000,
+  # so keep that as the default unless you also change Envoy bootstrap generation.
+  address: "0.0.0.0:18000"
+
+# TLS configuration (mTLS - mutual authentication required)
+# xDS server is secure by default and requires client certificate authentication
+tls:
+  server_cert: "/var/lib/globular/config/tls/fullchain.pem"
+  server_key: "/var/lib/globular/config/tls/privkey.pem"
+  client_ca: "/var/lib/globular/pki/ca.pem"
+
+logging:
+  level: "info"   # "debug" / "info" / "warn" / "error"
+
+runtime:
+  # Used as a general writable location for any generated runtime artifacts
+  # (snapshots, bootstrap outputs, etc.), without writing into /etc.
+  state_dir: "/var/lib/globular"
+

@@ -1,0 +1,23 @@
+{
+  "type": "command",
+  "name": "restic",
+  "version": "0.18.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/restic",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/restic_cmd.yaml"
+  },
+  "description": "Deduplicated encrypted backup tool — used by backup-manager for filesystem and S3 backup operations.",
+  "keywords": [
+    "restic",
+    "backup",
+    "deduplication",
+    "encryption",
+    "restore",
+    "snapshot"
+  ],
+  "license": "BSD-2-Clause",
+  "entrypoint_checksum": "sha256:3d98cb1b957c83276c5dd226dba918b90ea22db80556e9b6ab9ce39bba87c71f"
+}

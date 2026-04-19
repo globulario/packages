@@ -1,0 +1,21 @@
+{
+  "type": "service",
+  "name": "discovery",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/discovery_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/discovery_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute",
+    "control-plane"
+  ],
+  "priority": 3,
+  "systemd_unit": "globular-discovery.service",
+  "health_check_unit": "globular-discovery.service",
+  "entrypoint_checksum": "sha256:0c5f0ac07c259d7ca45a0145f222910c81005adbd862c2c68d7c9048f77514f6"
+}

@@ -1,0 +1,29 @@
+{
+  "type": "infrastructure",
+  "name": "minio",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/minio",
+  "defaults": {
+    "configDir": "config/minio",
+    "spec": "specs/minio_service.yaml",
+    "scriptsDir": "scripts"
+  },
+  "description": "S3-compatible object storage server for backup artifacts, media files, and blob data.",
+  "keywords": [
+    "minio",
+    "object-storage",
+    "s3",
+    "backup",
+    "blob"
+  ],
+  "license": "AGPL-3.0",
+  "systemd_unit": "globular-minio.service",
+  "provides_capabilities": [
+    "object-store"
+  ],
+  "health_check_unit": "globular-minio.service",
+  "health_check_port": 9000,
+  "entrypoint_checksum": "sha256:7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f"
+}

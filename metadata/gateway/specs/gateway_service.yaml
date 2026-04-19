@@ -1,0 +1,106 @@
+version: 1
+
+metadata:
+  name: gateway
+  version: "0.0.1"
+  kind: service
+  description: "HTTP/gRPC gateway that serves the admin UI and proxies API requests to backend services."
+  keywords: [gateway, http, grpc, admin-ui, api-proxy]
+  license: MIT
+  provides_capabilities: [gateway]
+  runtime_local_dependencies: [xds, envoy]
+  health_check:
+    unit: globular-gateway.service
+    port: 8080
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates use canonical PKI paths)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-gateway-bin
+    type: install_binaries
+
+  # Install packaged payload (binary + config) produced by build.sh
+  - id: install-gateway-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: true
+    install_spec: false
+    install_systemd: false
+
+  - id: install-gateway-service
+    type: install_services
+    units:
+      - name: globular-gateway.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Gateway
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          WorkingDirectory={{.StateDir}}/services
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+          ExecStart={{.Prefix}}/bin/gateway
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-gateway
+    type: enable_services
+    services:
+      - globular-gateway.service
+
+  - id: start-gateway
+    type: start_services
+    services:
+      - globular-gateway.service
+    binaries:
+      globular-gateway.service: gateway
+
+  - id: health-gateway
+    type: health_checks
+    services:
+      - globular-gateway.service

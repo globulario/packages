@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "ai-router",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/ai_router_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/ai_router_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-ai-router.service",
+  "health_check_unit": "globular-ai-router.service",
+  "entrypoint_checksum": "sha256:e2f0fd341beb75b7540c4bd5f8693e54261b9d8b6c4a92c610541fa5ef10af45"
+}

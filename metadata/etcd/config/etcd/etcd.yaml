@@ -1,0 +1,53 @@
+# Single-node embedded etcd defaults for Globular
+# TLS ENABLED BY DEFAULT for security
+name: "globular-etcd"
+
+# Store data under Globular state root
+data-dir: "/var/lib/globular/etcd"
+
+# Client API with TLS (what globular-xds will dial)
+# MUST use routable IP — 127.0.0.1 breaks multi-node clusters.
+# Replace NODE_IP with the actual node IP before use.
+listen-client-urls: "https://NODE_IP:2379,https://127.0.0.1:2379"
+advertise-client-urls: "https://NODE_IP:2379"
+
+# Peer traffic with TLS
+listen-peer-urls: "https://NODE_IP:2380"
+initial-advertise-peer-urls: "https://NODE_IP:2380"
+
+# Single-node cluster bootstrap with TLS
+initial-cluster: "globular-etcd=https://NODE_IP:2380"
+initial-cluster-state: "new"
+initial-cluster-token: "globular-etcd-cluster"
+
+# Client TLS configuration
+client-transport-security:
+  cert-file: "/var/lib/globular/config/tls/fullchain.pem"
+  key-file: "/var/lib/globular/config/tls/privkey.pem"
+  client-cert-auth: false
+  # trusted-ca-file: "/var/lib/globular/pki/ca.pem"  # Commented out - enables client auth even with client-cert-auth: false
+  auto-tls: false
+
+# Peer TLS configuration
+peer-transport-security:
+  cert-file: "/var/lib/globular/config/tls/fullchain.pem"
+  key-file: "/var/lib/globular/config/tls/privkey.pem"
+  client-cert-auth: false
+  trusted-ca-file: "/var/lib/globular/pki/ca.pem"
+  auto-tls: false
+
+# Logging
+logger: "zap"
+log-level: "info"
+log-outputs: ["stderr"]
+
+# Practical defaults
+snapshot-count: 10000
+
+# Keep DB from growing forever in typical key-churn workloads
+auto-compaction-mode: "periodic"
+auto-compaction-retention: "1h"
+
+# 0 means “use default” (keep it simple unless you want a hard quota)
+quota-backend-bytes: 0
+

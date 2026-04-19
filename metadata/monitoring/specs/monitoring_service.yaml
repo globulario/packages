@@ -1,0 +1,113 @@
+version: 1
+
+metadata:
+  name: monitoring
+  profiles: [core, compute, control-plane]
+  priority: 8
+
+service:
+  name: monitoring
+  exec: monitoring_server
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/monitoring"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates must be provisioned by Day-0 bootstrap)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      # INV-PKI-1: Removed obsolete config/tls directory - all certs under pki/
+
+  - id: install-monitoring-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: ensure-monitoring-config
+    type: ensure_service_config
+    service_name: monitoring
+    exec: monitoring_server
+    address_host: auto
+    rewrite_if_out_of_range: true
+
+  - id: install-monitoring-service
+    type: install_services
+    units:
+      - name: globular-monitoring.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular monitoring
+          After=network-online.target globular-event.service globular-resource.service
+          Wants=network-online.target globular-event.service globular-resource.service
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          WorkingDirectory={{.StateDir}}/monitoring
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/monitoring && chown globular:globular {{.StateDir}}/monitoring'
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+          ExecStart={{.Prefix}}/bin/monitoring_server
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-monitoring
+    type: enable_services
+    services:
+      - globular-monitoring.service
+
+  - id: start-monitoring
+    type: start_services
+    services:
+      - globular-monitoring.service
+    binaries:
+      globular-monitoring.service: monitoring_server
+
+  - id: health-monitoring
+    type: health_checks
+    services:
+      - globular-monitoring.service

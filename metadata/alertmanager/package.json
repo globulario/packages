@@ -1,0 +1,25 @@
+{
+  "type": "infrastructure",
+  "name": "alertmanager",
+  "version": "0.28.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/alertmanager",
+  "defaults": {
+    "configDir": "config/alertmanager",
+    "spec": "specs/alertmanager_service.yaml",
+    "scriptsDir": "scripts"
+  },
+  "description": "Prometheus Alertmanager for handling alerts sent by Prometheus and routing notifications.",
+  "keywords": [
+    "alertmanager",
+    "prometheus",
+    "alerting",
+    "notifications",
+    "monitoring"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-alertmanager.service",
+  "health_check_unit": "globular-alertmanager.service",
+  "entrypoint_checksum": "sha256:12e5415ef0e8c0a530992c68179a25b8520131ed7b55f0bc417ce4a6cfa99968"
+}

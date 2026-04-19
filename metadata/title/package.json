@@ -1,0 +1,20 @@
+{
+  "type": "service",
+  "name": "title",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/title_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/title_service.yaml"
+  },
+  "profiles": [
+    "core",
+    "compute"
+  ],
+  "priority": 1000,
+  "systemd_unit": "globular-title.service",
+  "health_check_unit": "globular-title.service",
+  "entrypoint_checksum": "sha256:53e8c1377a8f7882ae667bdf906e6857e6b3d5277b9a5afed0aab98bcdf70dd4"
+}

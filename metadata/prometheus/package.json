@@ -1,0 +1,25 @@
+{
+  "type": "infrastructure",
+  "name": "prometheus",
+  "version": "3.5.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/prometheus",
+  "defaults": {
+    "configDir": "config/prometheus",
+    "spec": "specs/prometheus_service.yaml",
+    "scriptsDir": "scripts"
+  },
+  "description": "Time-series monitoring and alerting system for cluster metrics collection.",
+  "keywords": [
+    "prometheus",
+    "monitoring",
+    "metrics",
+    "alerting",
+    "time-series"
+  ],
+  "license": "Apache-2.0",
+  "systemd_unit": "globular-prometheus.service",
+  "health_check_unit": "globular-prometheus.service",
+  "entrypoint_checksum": "sha256:0ed1645904a935ae3a10f028a3af5814330effd69bcc770262eb35228e8ccd86"
+}

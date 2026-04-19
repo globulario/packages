@@ -1,0 +1,32 @@
+{
+  "type": "service",
+  "name": "gateway",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/gateway",
+  "defaults": {
+    "configDir": "config/gateway",
+    "spec": "specs/gateway_service.yaml"
+  },
+  "description": "HTTP/gRPC gateway that serves the admin UI and proxies API requests to backend services.",
+  "keywords": [
+    "gateway",
+    "http",
+    "grpc",
+    "admin-ui",
+    "api-proxy"
+  ],
+  "license": "MIT",
+  "systemd_unit": "globular-gateway.service",
+  "provides_capabilities": [
+    "gateway"
+  ],
+  "runtime_local_dependencies": [
+    "xds",
+    "envoy"
+  ],
+  "health_check_unit": "globular-gateway.service",
+  "health_check_port": 8080,
+  "entrypoint_checksum": "sha256:70f2b69faf15f245a96187e24afbfdba9c1b8ef1991d6291c77347c8df304dad"
+}
