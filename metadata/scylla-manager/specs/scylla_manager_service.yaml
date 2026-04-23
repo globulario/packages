@@ -67,8 +67,8 @@ steps:
           SCYLLA_CFG="/etc/scylla/scylla.yaml"
           CQL_HOST=""
           if [ -f "$SCYLLA_CFG" ]; then
-            CQL_HOST=$(grep -E '^rpc_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d '[:space:]')
-            [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E '^listen_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d '[:space:]')
+            CQL_HOST=$(grep -E '^rpc_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d "[:space:]'\"")
+            [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E '^listen_address:' "$SCYLLA_CFG" | awk '{print $2}' | tr -d "[:space:]'\"")
           fi
           # 2) Fallback: parse the listening socket
           if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then
