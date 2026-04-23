@@ -74,11 +74,14 @@ steps:
           if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then
             CQL_HOST=$(ss -lnt | awk '/:9042 /{split($4,a,":"); print a[1]; exit}')
           fi
-          # 3) Ultimate fallback
-          [ -z "$CQL_HOST" ] && CQL_HOST="127.0.0.1"
+          # 3) Error out — never fall back to localhost (CLAUDE.md hard rule)
+          if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "127.0.0.1" ]; then
+            echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2
+            exit 1
+          fi
           cat > "$CFG" <<EOCONF
           # Scylla Manager configuration (managed by Globular)
-          http: 127.0.0.1:5080
+          http: ${CQL_HOST}:5080
 
           database:
             hosts:
