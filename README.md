@@ -1,185 +1,211 @@
 # Globular Packages
 
-**Frontend packages, web apps, package metadata, and bundled dependencies used by the Globular platform.**
+**Package metadata, bundled dependencies, and install scripts for Globular artifacts.**
 
-This directory is the `packages/` workspace used by the `globular-admin` repository. It is not a single library. It is a collection of related package layers that support both the **operator-facing UI** and the **packaging/distribution metadata** used across the wider Globular project.
+This directory contains the package description layer used to build, publish, install, and validate Globular artifacts.
 
-At a glance, this workspace contains:
+It is **not** the frontend workspace and it is **not** the service source tree.
 
-- browser applications built with **Vite + TypeScript**
-- shared frontend packages such as the **TypeScript SDK** and **component library**
-- **package metadata** used to describe Globular services and infrastructure artifacts
-- bundled third-party dependencies required by some package/install flows
+Instead, this package set defines what Globular can ship and install:
+- service packages
+- infrastructure packages
+- command-line tool packages
+- bundled third-party dependencies
+- package-specific install hooks
 
-## What this directory is for
-
-The `packages/` tree serves two distinct purposes:
-
-### 1. Frontend application workspace
-It contains the packages used to build browser-based Globular apps:
-
-- `web/` for the main admin console
-- `media/` for the media-focused web application
-- `sdk/` for TypeScript service access
-- `components/` for reusable UI building blocks
-
-### 2. Packaging metadata workspace
-It also contains service metadata under `metadata/` for many Globular artifacts, including infrastructure, control-plane services, application services, and supporting tools.
-
-That means this directory is where **UI/application code** and **package description data** meet.
-
-## Directory structure
+## What lives here
 
 ```text
 packages/
-├── web/                 # Main admin console app (@globular/admin-web)
-├── media/               # Media-focused web app (@globular/media-web)
-├── sdk/                 # TypeScript SDK for browser apps (@globular/sdk)
-├── components/          # Reusable UI components (@globular/components)
-├── metadata/            # Package metadata for services, infra, and tools
-├── dependencies/        # Bundled third-party binaries/assets
-└── scripts/             # Package-specific install/runtime scripts
+├── metadata/                 # package descriptors for Globular artifacts
+├── dependencies/             # bundled external binaries/assets
+└── scripts/                  # package-specific install/runtime scripts
 ```
 
-## Frontend packages
+## `metadata/`
 
-### [`web/`](web/README.md)
-The main **Globular admin console**.
+The `metadata/` directory contains one package folder per artifact.  
+Each artifact includes a `package.json` describing things such as:
 
-Package name: `@globular/admin-web`
+- package type
+- name
+- version
+- target platform
+- publisher
+- entrypoint
+- default spec path
+- profiles
+- systemd unit
+- health-check unit/port
+- entrypoint checksum
 
-This app is the operator-facing UI for the platform. It is built with Vite and TypeScript and depends on the shared SDK and component packages.
+These metadata files are the declarative description of what a package is and how it should be installed or supervised.
 
-Available commands:
+### Package types found in this archive
 
-```bash
-pnpm --filter @globular/admin-web dev
-pnpm --filter @globular/admin-web build
-pnpm --filter @globular/admin-web preview
+- **34 service packages**
+- **12 infrastructure packages**
+- **10 command packages**
+
+### Service packages
+
+These are Globular services that run inside the platform:
+
+- `ai-executor`
+- `ai-memory`
+- `ai-router`
+- `ai-watcher`
+- `authentication`
+- `backup-manager`
+- `blog`
+- `catalog`
+- `cluster-controller`
+- `cluster-doctor`
+- `conversation`
+- `discovery`
+- `dns`
+- `echo`
+- `event`
+- `file`
+- `gateway`
+- `ldap`
+- `log`
+- `mail`
+- `media`
+- `monitoring`
+- `node-agent`
+- `persistence`
+- `rbac`
+- `repository`
+- `resource`
+- `search`
+- `sql`
+- `storage`
+- `title`
+- `torrent`
+- `workflow`
+- `xds`
+
+### Infrastructure packages
+
+These are supporting runtime dependencies and infrastructure components:
+
+- `alertmanager`
+- `envoy`
+- `etcd`
+- `keepalived`
+- `mcp`
+- `minio`
+- `node-exporter`
+- `prometheus`
+- `scylla-manager`
+- `scylla-manager-agent`
+- `scylladb`
+- `sidekick`
+
+### Command packages
+
+These are commands or tools shipped as installable artifacts:
+
+- `claude`
+- `etcdctl`
+- `ffmpeg`
+- `globular-cli`
+- `mc`
+- `rclone`
+- `restic`
+- `sctool`
+- `sha256sum`
+- `yt-dlp`
+
+## Example metadata fields
+
+A typical package descriptor in this archive includes fields like:
+
+```json
+{
+  "type": "service",
+  "name": "cluster-controller",
+  "version": "0.0.1",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/cluster_controller_server",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/cluster_controller_service.yaml"
+  },
+  "profiles": ["control-plane"],
+  "systemd_unit": "globular-cluster-controller.service",
+  "health_check_unit": "globular-cluster-controller.service",
+  "entrypoint_checksum": "sha256:..."
+}
 ```
 
-### [`media/`](media/README.md)
-A separate **media web application**.
+This shows the purpose of the directory well: it is the **artifact-definition layer** used by the package/install pipeline.
 
-Package name: `@globular/media-web`
+## `dependencies/`
 
-This app provides a focused media experience built on the same frontend stack and shared packages used by the admin UI.
+This directory contains bundled third-party assets required by some packages.
 
-Available commands:
+In the archive you provided, it contains:
 
-```bash
-pnpm --filter @globular/media-web dev
-pnpm --filter @globular/media-web build
-pnpm --filter @globular/media-web preview
-```
+- `dependencies/restic-0.18.1/restic`
 
-### [`sdk/`](sdk/README.md)
-The **TypeScript SDK** for browser-based Globular applications.
+That indicates this package set can also carry pre-bundled external tools instead of relying only on system packages or remote downloads.
 
-Package name: `@globular/sdk`
+## `scripts/`
 
-The SDK builds to `dist/` and exposes browser-facing service clients and shared helpers. It depends on generated web client artifacts from the backend repository.
+This directory contains package-specific scripts used during install or post-install flows.
 
-Key details from the package:
-
-- ESM package
-- TypeScript build output in `dist/`
-- test suite via **Vitest**
-- depends on `globular-web-client` from `services/typescript/dist`
-
-Available commands:
-
-```bash
-pnpm --filter @globular/sdk build
-pnpm --filter @globular/sdk test
-```
-
-### [`components/`](components/README.md)
-The **shared UI component library**.
-
-Package name: `@globular/components`
-
-This package exports reusable browser UI modules such as layouts, dialogs, menus, lists, tables, markdown rendering, split views, and wizard-style flows.
-
-It is used by the admin and media applications and depends on the SDK and media workspace packages.
-
-Available commands:
-
-```bash
-pnpm --filter @globular/components build
-```
-
-## Metadata packages
-
-### `metadata/`
-This directory contains **package metadata** for a large part of the Globular platform.
-
-Examples include:
-
-- control plane: `cluster-controller`, `node-agent`, `workflow`, `repository`
-- infrastructure: `etcd`, `envoy`, `prometheus`, `alertmanager`, `minio`, `scylladb`
-- core services: `authentication`, `rbac`, `dns`, `event`, `file`, `log`, `resource`
-- app/services: `blog`, `catalog`, `conversation`, `media`, `search`, `storage`, `title`, `torrent`
-- supporting tools: `globular-cli`, `mcp`, `ffmpeg`, `yt-dlp`, `rclone`, `restic`, `sha256sum`
-
-Each metadata package contains a `package.json` that describes the corresponding artifact.
-
-This part of the workspace is important because Globular is not only a UI stack. It is also a **packaged service platform** with explicit artifact descriptions.
-
-## Dependencies and scripts
-
-### `dependencies/`
-This directory contains bundled external assets used by package/install flows.
-
-In the extracted workspace you provided, it includes:
-
-- `restic-0.18.1/restic`
-
-### `scripts/`
-Package-specific scripting support.
-
-In the extracted workspace you provided, it includes:
+In the archive you provided, it contains:
 
 - `scripts/scylladb/post-install.sh`
 
-## How this fits into the wider project
+This means some artifacts need additional setup steps beyond dropping files on disk, and those hooks live here.
 
-This directory is part of the `globular-admin` repository, which is the **frontend/application layer** of Globular.
+## What this directory is for in the Globular project
 
-Related repositories:
+This package set matters because Globular is not only source code. It is a **packaged platform**.
 
-- **Globular**: top-level platform entry point and project overview
-- **services**: backend services, control plane, protobuf contracts, generated clients, and installable releases
-- **globular-admin**: admin UI, media app, SDK, components, and workspace docs
-- **globular-quickstart**: simulation and test environment
-- **globular-installer**: installer/bootstrap implementation used by packaged install flows
+This directory is where installable artifacts become explicit and machine-readable.
 
-## Development notes
+It supports things like:
 
-This workspace assumes a **pnpm workspace** environment and depends on sibling packages and generated client artifacts from the backend repository.
+- package publication
+- repository ingestion
+- install workflows
+- validation of entrypoints and checksums
+- package categorization by type and role
+- service supervision mapping through systemd units
+- profile-aware installation
 
-Typical workflow:
+## Relationship to the other repositories
 
-```bash
-pnpm install
-pnpm --filter @globular/admin-web dev
-pnpm --filter @globular/media-web dev
-pnpm --filter @globular/sdk test
-pnpm --filter @globular/components build
-```
+In the wider Globular project:
 
-## Who should read this directory
+- **`services`** contains most backend service source code and installable releases
+- **`Globular`** is the umbrella/platform entry-point repository
+- **`globular-installer`** contains installer/bootstrap implementation used by packaged install flows
+- **`globular-admin`** contains the frontend/admin/UI layer
 
-This `packages/` directory is useful for:
+This `packages/` content sits underneath that, as the **artifact metadata layer**.
 
-- frontend developers working on the admin console or media app
-- developers building browser apps on top of Globular
-- contributors working on the shared SDK or reusable UI elements
-- platform contributors managing package metadata for services and infrastructure
+## Typical use
 
-## See also
+People working in this directory are usually:
 
-- [`web/README.md`](web/README.md)
-- [`media/README.md`](media/README.md)
-- [`sdk/README.md`](sdk/README.md)
-- [`components/README.md`](components/README.md)
+- defining or updating package metadata
+- adding new installable artifacts
+- adjusting systemd/service wiring
+- adding bundled dependencies
+- attaching post-install hooks
+
+## Notes
+
+- These package descriptors target **Linux amd64** in the archive you provided.
+- The metadata is intentionally declarative and artifact-oriented.
+- This directory is closer to **distribution engineering** than to app development.
+
+## License
+
+See the repository license and the licenses declared by the individual artifacts where applicable.
