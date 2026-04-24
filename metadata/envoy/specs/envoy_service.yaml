@@ -100,7 +100,6 @@ steps:
           Type=simple
           User=globular
           Group=globular
-          WorkingDirectory={{.StateDir}}
           Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
           AmbientCapabilities=CAP_NET_BIND_SERVICE
           CapabilityBoundingSet=CAP_NET_BIND_SERVICE

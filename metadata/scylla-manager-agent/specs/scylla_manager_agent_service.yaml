@@ -79,7 +79,6 @@ steps:
           User=scylla
           Group=scylla
           SupplementaryGroups=globular
-          WorkingDirectory={{.StateDir}}/scylla-manager-agent
           ExecStart={{.Prefix}}/bin/scylla_manager_agent --config-file {{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml
           Restart=on-failure
           RestartSec=5

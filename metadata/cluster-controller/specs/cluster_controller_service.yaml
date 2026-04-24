@@ -82,10 +82,8 @@ steps:
           Type=simple
           User=globular
           Group=globular
-          WorkingDirectory={{.StateDir}}/cluster_controller
           Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
 
-          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/cluster_controller && chown globular:globular {{.StateDir}}/cluster_controller'
           ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
           ExecStart={{.Prefix}}/bin/cluster_controller_server
           Restart=on-failure
