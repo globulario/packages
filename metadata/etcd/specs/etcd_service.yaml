@@ -72,6 +72,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           # Single-node embedded etcd defaults for Globular
           # TLS ENABLED BY DEFAULT for security

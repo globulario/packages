@@ -71,6 +71,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           # Globular Prometheus configuration
           # Scrapes all Globular gRPC services that expose /metrics

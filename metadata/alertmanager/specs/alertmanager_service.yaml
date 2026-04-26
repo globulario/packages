@@ -59,6 +59,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           # Globular Alertmanager configuration — Day-0 default.
           # Alerts are received, grouped, and visible via the Alertmanager UI

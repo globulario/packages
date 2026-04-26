@@ -84,6 +84,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           MINIO_ROOT_USER=globular
           MINIO_ROOT_PASSWORD=globularadmin
@@ -110,6 +111,7 @@ steps:
         group: globular
         mode: 0600
         atomic: true
+        skip_if_exists: true
         content: |
           globular:globularadmin
 
