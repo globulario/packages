@@ -2,8 +2,6 @@
 Description=Globular Envoy Proxy
 After=network-online.target globular-xds.service
 Wants=network-online.target globular-xds.service
-Requires=globular-xds.service
-PartOf=globular-xds.service
 
 [Service]
 Type=simple
