@@ -35,7 +35,23 @@ if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
     echo "[scylladb/post-install] ScyllaDB is active but CQL not ready — proceeding with fresh install"
 fi
 
-# ── 0b. Ensure ScyllaDB is STOPPED ──────────────────────────────────────
+# ── 0b. Protect existing cluster config (seed-only guard) ──────────────
+# If scylla.yaml already exists with a valid cluster name (not the dpkg
+# default), this is a reinstall on a node that was previously configured.
+# Overwriting the config and wiping data would destroy Raft cluster state.
+# Only proceed with fresh install if no config exists or it's the dpkg default.
+SCYLLA_YAML_PATH="/etc/scylla/scylla.yaml"
+if [[ -f "${SCYLLA_YAML_PATH}" ]]; then
+    EXISTING_CLUSTER=$(grep -oP "cluster_name:\s*['\"]?\K[^'\"]*" "${SCYLLA_YAML_PATH}" 2>/dev/null || echo "")
+    if [[ -n "${EXISTING_CLUSTER}" && "${EXISTING_CLUSTER}" != "Test Cluster" ]]; then
+        echo "[scylladb/post-install] Existing scylla.yaml found (cluster: ${EXISTING_CLUSTER})"
+        echo "[scylladb/post-install] Skipping reinstall to protect Raft cluster state (seed-only)"
+        echo "[scylladb/post-install] To force fresh install: rm ${SCYLLA_YAML_PATH} && reinstall"
+        exit 0
+    fi
+fi
+
+# ── 0c. Ensure ScyllaDB is STOPPED ──────────────────────────────────────
 systemctl stop scylla-server.service 2>/dev/null || true
 echo "[scylladb/post-install] ScyllaDB stopped"
 
