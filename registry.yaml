@@ -1,0 +1,806 @@
+# Canonical Package Registry — single source of truth for all Globular packages.
+#
+# Every package in the platform is listed here. Build scripts, controller logic,
+# node-agent classification, and CI pipelines should read from this file instead
+# of maintaining their own hardcoded lists.
+#
+# Fields:
+#   name                 — package name (must match metadata/ dir and pkg-map.json key)
+#   kind                 — service | infrastructure | command
+#   binary               — entrypoint binary name
+#   go_target            — Go build path relative to golang/ (empty = third-party)
+#   systemd_unit         — systemd unit name (default: globular-{name}.service)
+#   version_source       — platform (stamped from release tag) | self (binary reports own version)
+#   publisher_id         — artifact publisher (default: core@globular.io)
+#   control_plane_critical — true if required before workloads can start
+#   day0_required        — true if must be installed during Day-0 bootstrap
+#   day1_join_required   — true if must be present before a joining node can operate
+#   skip_runtime_check   — true for command-like packages with no systemd unit
+#   bootstrap_tier       — foundation | core_control | supporting | workload
+#   profiles             — list of node profiles that require this package
+#   provides             — gRPC service IDs this package exposes
+#   requires             — gRPC service IDs this package depends on
+#   hard_deps            — packages that must be installed first
+#
+# Updating this file:
+#   1. Add or modify the entry
+#   2. Run: python3 scripts/validate-registry.py (when available)
+#   3. Regenerate pkg-map.json: python3 scripts/gen-pkg-map.py (when available)
+
+packages:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE — Foundation tier (etcd, storage, networking)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: etcd
+    kind: infrastructure
+    binary: etcd
+    go_target: ""
+    systemd_unit: globular-etcd.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: false
+    bootstrap_tier: foundation
+    profiles: [core]
+    provides: []
+    requires: []
+    hard_deps: []
+
+  - name: scylladb
+    kind: infrastructure
+    binary: noop
+    go_target: ""
+    systemd_unit: scylla-server.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: foundation
+    profiles: [core]
+    provides: []
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: minio
+    kind: infrastructure
+    binary: minio
+    go_target: ""
+    systemd_unit: globular-minio.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: foundation
+    profiles: [storage]
+    provides: []
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: envoy
+    kind: infrastructure
+    binary: envoy
+    go_target: ""
+    systemd_unit: globular-envoy.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [xds]
+    hard_deps: [xds]
+
+  - name: xds
+    kind: infrastructure
+    binary: xds
+    go_target: ""
+    systemd_unit: globular-xds.service
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: gateway
+    kind: infrastructure
+    binary: gateway
+    go_target: ""
+    systemd_unit: globular-gateway.service
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [etcd, xds]
+    hard_deps: [etcd, xds]
+
+  - name: keepalived
+    kind: infrastructure
+    binary: noop
+    go_target: ""
+    systemd_unit: globular-keepalived.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: false
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [gateway]
+    provides: []
+    requires: []
+    hard_deps: []
+
+  - name: prometheus
+    kind: infrastructure
+    binary: prometheus
+    go_target: ""
+    systemd_unit: globular-prometheus.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: []
+    hard_deps: []
+
+  - name: alertmanager
+    kind: infrastructure
+    binary: alertmanager
+    go_target: ""
+    systemd_unit: globular-alertmanager.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [prometheus]
+    hard_deps: []
+
+  - name: node-exporter
+    kind: infrastructure
+    binary: node_exporter
+    go_target: ""
+    systemd_unit: globular-node-exporter.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: []
+    hard_deps: []
+
+  - name: sidekick
+    kind: infrastructure
+    binary: sidekick
+    go_target: ""
+    systemd_unit: globular-sidekick.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [storage]
+    provides: []
+    requires: [minio]
+    hard_deps: [minio]
+
+  - name: scylla-manager
+    kind: infrastructure
+    binary: scylla_manager
+    go_target: ""
+    systemd_unit: globular-scylla-manager.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [scylladb]
+    hard_deps: [scylladb]
+
+  - name: scylla-manager-agent
+    kind: infrastructure
+    binary: scylla_manager_agent
+    go_target: ""
+    systemd_unit: globular-scylla-manager-agent.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: [scylladb]
+    hard_deps: [scylladb]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # COMMANDS — Binary-only tools, no systemd unit
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: etcdctl
+    kind: command
+    binary: etcdctl
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: restic
+    kind: command
+    binary: restic
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: rclone
+    kind: command
+    binary: rclone
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: ffmpeg
+    kind: command
+    binary: ffmpeg
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: mc
+    kind: command
+    binary: mc
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: sctool
+    kind: command
+    binary: sctool
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: sha256sum
+    kind: command
+    binary: sha256sum
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: yt-dlp
+    kind: command
+    binary: yt-dlp
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: claude
+    kind: command
+    binary: claude
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  - name: globular-cli
+    kind: command
+    binary: globularcli
+    go_target: globularcli
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: true
+    bootstrap_tier: workload
+    profiles: [core]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICES — Core control plane
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: node-agent
+    kind: service
+    binary: node_agent_server
+    go_target: node_agent/node_agent_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [node_agent.NodeAgentService]
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: cluster-controller
+    kind: service
+    binary: cluster_controller_server
+    go_target: cluster_controller/cluster_controller_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [control-plane]
+    provides: [cluster_controller.ClusterControllerService]
+    requires: [etcd, repository, workflow]
+    hard_deps: [etcd]
+
+  - name: cluster-doctor
+    kind: service
+    binary: cluster_doctor_server
+    go_target: cluster_doctor/cluster_doctor_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: false
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [control-plane]
+    provides: [cluster_doctor.ClusterDoctorService]
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: workflow
+    kind: service
+    binary: workflow_server
+    go_target: workflow/workflow_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [workflow.WorkflowService]
+    requires: [etcd]
+    hard_deps: [etcd]
+
+  - name: repository
+    kind: service
+    binary: repository_server
+    go_target: repository/repository_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: true
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [repository.PackageRepository]
+    requires: [etcd, minio, scylladb]
+    hard_deps: [etcd, minio]
+
+  - name: authentication
+    kind: service
+    binary: authentication_server
+    go_target: authentication/authentication_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [authentication.AuthenticationService]
+    requires: [etcd]
+
+  - name: rbac
+    kind: service
+    binary: rbac_server
+    go_target: rbac/rbac_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [rbac.RbacService]
+    requires: [etcd, scylladb]
+
+  - name: resource
+    kind: service
+    binary: resource_server
+    go_target: resource/resource_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: false
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [resource.ResourceService]
+    requires: [etcd, scylladb]
+
+  - name: discovery
+    kind: service
+    binary: discovery_server
+    go_target: discovery/discovery_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: false
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [discovery.DiscoveryService]
+    requires: [etcd]
+
+  - name: dns
+    kind: service
+    binary: dns_server
+    go_target: dns/dns_server
+    version_source: platform
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: core_control
+    profiles: [core]
+    provides: [dns.DnsService]
+    requires: [etcd, scylladb]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICES — Supporting / operational
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: event
+    kind: service
+    binary: event_server
+    go_target: event/event_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: [event.EventService]
+    requires: [etcd, scylladb]
+
+  - name: log
+    kind: service
+    binary: log_server
+    go_target: log/log_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: [log.LogService]
+    requires: [etcd]
+
+  - name: monitoring
+    kind: service
+    binary: monitoring_server
+    go_target: monitoring/monitoring_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: [monitoring.MonitoringService]
+    requires: [etcd, prometheus]
+
+  - name: backup-manager
+    kind: service
+    binary: backup_manager_server
+    go_target: backup_manager/backup_manager_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [backup.BackupService]
+    requires: [etcd, scylladb, minio]
+
+  - name: mcp
+    kind: service
+    binary: mcp
+    go_target: mcp
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: []
+    requires: [etcd]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICES — AI subsystem
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: ai-executor
+    kind: service
+    binary: ai_executor_server
+    go_target: ai_executor/ai_executor_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [ai_executor.AiExecutorService]
+    requires: [etcd, scylladb]
+
+  - name: ai-memory
+    kind: service
+    binary: ai_memory_server
+    go_target: ai_memory/ai_memory_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [ai_memory.AiMemoryService]
+    requires: [etcd, scylladb]
+
+  - name: ai-router
+    kind: service
+    binary: ai_router_server
+    go_target: ai_router/ai_router_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [ai_router.AiRouterService]
+    requires: [etcd]
+
+  - name: ai-watcher
+    kind: service
+    binary: ai_watcher_server
+    go_target: ai_watcher/ai_watcher_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [ai_watcher.AiWatcherService]
+    requires: [etcd, event]
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # SERVICES — Application workloads
+  # ════════════════════════════════════════════════════════════════════════════
+
+  - name: file
+    kind: service
+    binary: file_server
+    go_target: file/file_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [file.FileService]
+    requires: [etcd, minio]
+
+  - name: persistence
+    kind: service
+    binary: persistence_server
+    go_target: persistence/persistence_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [persistence.PersistenceService]
+    requires: [etcd, scylladb]
+
+  - name: search
+    kind: service
+    binary: search_server
+    go_target: search/search_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [search.SearchService]
+    requires: [etcd, scylladb]
+
+  - name: title
+    kind: service
+    binary: title_server
+    go_target: title/title_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [title.TitleService]
+    requires: [etcd, scylladb]
+
+  - name: media
+    kind: service
+    binary: media_server
+    go_target: media/media_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [media.MediaService]
+    requires: [etcd, minio, ffmpeg]
+
+  - name: blog
+    kind: service
+    binary: blog_server
+    go_target: blog/blog_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [blog.BlogService]
+    requires: [etcd, scylladb]
+
+  - name: catalog
+    kind: service
+    binary: catalog_server
+    go_target: catalog/catalog_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [catalog.CatalogService]
+    requires: [etcd, scylladb]
+
+  - name: conversation
+    kind: service
+    binary: conversation_server
+    go_target: conversation/conversation_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [conversation.ConversationService]
+    requires: [etcd, scylladb]
+
+  - name: echo
+    kind: service
+    binary: echo_server
+    go_target: echo/echo_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [echo.EchoService]
+    requires: [etcd]
+
+  - name: ldap
+    kind: service
+    binary: ldap_server
+    go_target: ldap/ldap_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [ldap.LdapService]
+    requires: [etcd]
+
+  - name: mail
+    kind: service
+    binary: mail_server
+    go_target: mail/mail_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [mail.MailService]
+    requires: [etcd]
+
+  - name: sql
+    kind: service
+    binary: sql_server
+    go_target: sql/sql_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [sql.SqlService]
+    requires: [etcd]
+
+  - name: storage
+    kind: service
+    binary: storage_server
+    go_target: storage/storage_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [storage.StorageService]
+    requires: [etcd, minio]
+
+  - name: torrent
+    kind: service
+    binary: torrent_server
+    go_target: torrent/torrent_server
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [torrent.TorrentService]
+    requires: [etcd]
