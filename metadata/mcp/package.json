@@ -1,5 +1,5 @@
 {
-  "type": "infrastructure",
+  "type": "service",
   "name": "mcp",
   "version": "0.0.3",
   "platform": "linux_amd64",
