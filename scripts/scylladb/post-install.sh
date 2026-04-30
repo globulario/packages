@@ -38,17 +38,44 @@ fi
 # ── 0b. Protect existing cluster config (seed-only guard) ──────────────
 # If scylla.yaml already exists with a valid cluster name (not the dpkg
 # default), this is a reinstall on a node that was previously configured.
-# Overwriting the config and wiping data would destroy Raft cluster state.
-# Only proceed with fresh install if no config exists or it's the dpkg default.
+# BUT: on Day-1 join, the previous post-install may have written seeds
+# pointing only to the local node (ScyllaDB never joined the ring).
+# If seeds don't match the current cluster, we MUST rewrite — not skip.
 SCYLLA_YAML_PATH="/etc/scylla/scylla.yaml"
+SKIP_FULL_INSTALL=false
 if [[ -f "${SCYLLA_YAML_PATH}" ]]; then
     EXISTING_CLUSTER=$(grep -oP "cluster_name:\s*['\"]?\K[^'\"]*" "${SCYLLA_YAML_PATH}" 2>/dev/null || echo "")
     if [[ -n "${EXISTING_CLUSTER}" && "${EXISTING_CLUSTER}" != "Test Cluster" ]]; then
         echo "[scylladb/post-install] Existing scylla.yaml found (cluster: ${EXISTING_CLUSTER})"
-        echo "[scylladb/post-install] Skipping reinstall to protect Raft cluster state (seed-only)"
-        echo "[scylladb/post-install] To force fresh install: rm ${SCYLLA_YAML_PATH} && reinstall"
-        exit 0
+        echo "[scylladb/post-install] Checking if seeds match current cluster..."
+        # We haven't discovered seeds yet, so do a quick lookup here.
+        _ETCD_EP="${STATE_DIR}/config/etcd_endpoints"
+        _CLUSTER_SEED=""
+        if [[ -f "${_ETCD_EP}" ]]; then
+            _NODE_IP_QUICK=$(ip route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
+            while IFS= read -r _line; do
+                _line=$(echo "$_line" | sed 's|https://||;s|http://||;s|:.*||' | xargs)
+                if [[ -n "$_line" && "$_line" != "127.0.0.1" && "$_line" != "localhost" && "$_line" != "${_NODE_IP_QUICK}" ]]; then
+                    _CLUSTER_SEED="${_line}"
+                    break
+                fi
+            done < "${_ETCD_EP}"
+        fi
+        CURRENT_SEEDS=$(grep -A2 'seeds:' "${SCYLLA_YAML_PATH}" | grep -oP "seeds:\s*'\K[^']+" || echo "")
+        if [[ -n "${_CLUSTER_SEED}" && -n "${CURRENT_SEEDS}" && "${CURRENT_SEEDS}" == *"${_CLUSTER_SEED}"* ]]; then
+            echo "[scylladb/post-install] Seeds match cluster — skipping reinstall to protect Raft state"
+            SKIP_FULL_INSTALL=true
+        elif [[ -z "${_CLUSTER_SEED}" ]]; then
+            # No remote seed found (Day-0 node) — protect existing config.
+            echo "[scylladb/post-install] No remote seed (Day-0) — skipping reinstall to protect Raft state"
+            SKIP_FULL_INSTALL=true
+        else
+            echo "[scylladb/post-install] Seeds MISMATCH (have: ${CURRENT_SEEDS}, need: ${_CLUSTER_SEED}) — proceeding with rewrite"
+        fi
     fi
+fi
+if [[ "${SKIP_FULL_INSTALL}" == "true" ]]; then
+    exit 0
 fi
 
 # ── 0c. Ensure ScyllaDB is STOPPED ──────────────────────────────────────

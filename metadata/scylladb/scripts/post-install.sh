@@ -77,6 +77,30 @@ if [[ -f "${ETCD_ENDPOINTS}" ]]; then
 fi
 echo "[scylladb/post-install] Seeds: ${SEED_IP}"
 
+# ── 2b. Check if existing seeds match the cluster ─────────────────────────
+# Used by both the data wipe (section 4) and yaml rewrite (section 5) guards.
+# If existing Raft data exists but seeds point to the wrong cluster, the node
+# bootstrapped isolated and never joined. Both data and config must be reset.
+NEEDS_SEED_FIX=false
+if [[ "${EXISTING_DATA}" == "true" && -f /etc/scylla/scylla.yaml ]]; then
+    CURRENT_SEEDS=$(grep -A2 'seeds:' /etc/scylla/scylla.yaml | grep -oP "seeds:\s*'\K[^']+" || echo "")
+    SEEDS_OK=false
+    if [[ -n "${CURRENT_SEEDS}" && -n "${SEED_IP}" ]]; then
+        IFS=',' read -ra NEW_SEEDS <<< "${SEED_IP}"
+        for s in "${NEW_SEEDS[@]}"; do
+            s=$(echo "$s" | xargs)
+            if [[ "${CURRENT_SEEDS}" == *"${s}"* ]]; then
+                SEEDS_OK=true
+                break
+            fi
+        done
+    fi
+    if [[ "${SEEDS_OK}" != "true" ]]; then
+        NEEDS_SEED_FIX=true
+        echo "[scylladb/post-install] Seed mismatch detected (have: ${CURRENT_SEEDS}, need: ${SEED_IP}) — will wipe stale Raft data and rewrite config"
+    fi
+fi
+
 # ── 3. Copy TLS certificates ─────────────────────────────────────────────
 SCYLLA_TLS_DIR="/etc/scylla/tls"
 PKI_CERT_DIR="${STATE_DIR}/pki/issued/services"
@@ -97,10 +121,14 @@ else
     echo "[scylladb/post-install] WARNING: PKI certs not found — TLS setup skipped"
 fi
 
-# ── 4. Wipe data for clean Raft bootstrap (ONLY on first install) ────────
-if [[ "${EXISTING_DATA}" == "true" ]]; then
+# ── 4. Wipe data for clean Raft bootstrap (ONLY on first install or seed mismatch)
+if [[ "${EXISTING_DATA}" == "true" && "${NEEDS_SEED_FIX}" != "true" ]]; then
     echo "[scylladb/post-install] SKIPPING data wipe — existing Raft identity in /var/lib/scylla/data/system/"
     echo "[scylladb/post-install] To force a clean bootstrap, manually run: rm -rf /var/lib/scylla/data"
+elif [[ "${NEEDS_SEED_FIX}" == "true" ]]; then
+    echo "[scylladb/post-install] Wiping STALE Raft data (seeds mismatch — node never joined cluster)..."
+    rm -rf /var/lib/scylla/data /var/lib/scylla/commitlog /var/lib/scylla/hints \
+           /var/lib/scylla/view_hints /var/lib/scylla/coredump
 else
     echo "[scylladb/post-install] Wiping data for clean Raft bootstrap (first install)..."
     rm -rf /var/lib/scylla/data /var/lib/scylla/commitlog /var/lib/scylla/hints \
@@ -132,8 +160,8 @@ echo "[scylladb/post-install] Data directories clean"
 SCYLLA_YAML="/etc/scylla/scylla.yaml"
 mkdir -p /etc/scylla
 
-if [[ "${EXISTING_DATA}" == "true" && -f "${SCYLLA_YAML}" ]]; then
-    echo "[scylladb/post-install] SKIPPING scylla.yaml rewrite — existing Raft identity (controller owns live config)"
+if [[ "${EXISTING_DATA}" == "true" && "${NEEDS_SEED_FIX}" != "true" && -f "${SCYLLA_YAML}" ]]; then
+    echo "[scylladb/post-install] SKIPPING scylla.yaml rewrite — existing Raft identity with matching seeds"
 else
 echo "[scylladb/post-install] Writing scylla.yaml (seeds: ${SEED_IP}, listen: ${NODE_IP})"
 cat > "${SCYLLA_YAML}" <<EOF
