@@ -207,7 +207,7 @@ packages:
     kind: infrastructure
     binary: sidekick
     go_target: ""
-    systemd_unit: globular-sidekick.service
+    systemd_unit: ""
     version_source: self
     publisher_id: core@globular.io
     control_plane_critical: false
