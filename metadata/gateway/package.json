@@ -1,5 +1,5 @@
 {
-  "type": "service",
+  "type": "infrastructure",
   "name": "gateway",
   "version": "0.0.1",
   "platform": "linux_amd64",
