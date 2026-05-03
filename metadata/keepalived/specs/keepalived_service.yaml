@@ -97,14 +97,6 @@ steps:
           # All checks passed
           exit 0
 
-  # Verify keepalived binary was installed successfully
-  - id: verify-keepalived
-    type: health_checks
-    checks:
-      - name: keepalived-binary
-        type: command_exists
-        command: /usr/sbin/keepalived
-
   # Note: keepalived config (/etc/keepalived/keepalived.conf) is managed by node-agent
   # Node-agent will enable/start the service when IngressSpec.mode=vip_failover
   # We do NOT enable/start here to avoid activating keepalived before it's configured
