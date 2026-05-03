@@ -3,7 +3,7 @@ version: 1
 metadata:
   name: gateway
   version: "0.0.1"
-  kind: service
+  kind: infrastructure
   description: "HTTP/gRPC gateway that serves the admin UI and proxies API requests to backend services."
   keywords: [gateway, http, grpc, admin-ui, api-proxy]
   license: MIT
