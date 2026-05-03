@@ -1,0 +1,177 @@
+version: 1
+
+metadata:
+  name: etcd
+  version: "3.5.14"
+  kind: infrastructure
+  description: "Distributed key-value store used for service configuration, leader election, and cluster coordination."
+  keywords: [etcd, key-value, distributed, consensus, raft, configuration]
+  license: Apache-2.0
+  entrypoint: etcd
+  provides_capabilities: [config-store]
+  health_check:
+    unit: globular-etcd.service
+    port: 2379
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/etcd"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/config"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (INV-PKI-1: canonical paths)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-etcd-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-etcd-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/config/etcd.yaml"
+        owner: globular
+        group: globular
+        mode: 0644
+        atomic: true
+        skip_if_exists: true
+        content: |
+          # Single-node embedded etcd defaults for Globular
+          # TLS ENABLED BY DEFAULT for security
+          name: "globular-etcd"
+
+          # Store data under Globular state root
+          data-dir: "{{.StateDir}}/etcd"
+
+          # Client API with TLS (what globular-xds will dial)
+          # MUST use routable IP only — 127.0.0.1 breaks multi-node clusters
+          # and masks connectivity bugs.
+          listen-client-urls: "https://{{.NodeIP}}:2379"
+          advertise-client-urls: "https://{{.NodeIP}}:2379"
+
+          # Peer traffic with TLS
+          listen-peer-urls: "https://{{.NodeIP}}:2380"
+          initial-advertise-peer-urls: "https://{{.NodeIP}}:2380"
+
+          # Single-node cluster bootstrap with TLS
+          initial-cluster: "globular-etcd=https://{{.NodeIP}}:2380"
+          initial-cluster-state: "new"
+          initial-cluster-token: "globular-etcd-cluster"
+
+          # Client TLS configuration (INV-PKI-1: canonical paths)
+          client-transport-security:
+            cert-file: "{{.StateDir}}/pki/issued/services/service.crt"
+            key-file: "{{.StateDir}}/pki/issued/services/service.key"
+            client-cert-auth: false
+            # trusted-ca-file removed - having this enables client auth even with client-cert-auth: false
+            auto-tls: false
+
+          # Peer TLS configuration (INV-PKI-1: canonical paths)
+          peer-transport-security:
+            cert-file: "{{.StateDir}}/pki/issued/services/service.crt"
+            key-file: "{{.StateDir}}/pki/issued/services/service.key"
+            client-cert-auth: false
+            trusted-ca-file: "{{.StateDir}}/pki/ca.pem"
+            auto-tls: false
+
+          # Logging
+          logger: "zap"
+          log-level: "info"
+          log-outputs: ["stderr"]
+
+          # Practical defaults
+          snapshot-count: 10000
+
+          # Keep DB from growing forever in typical key-churn workloads
+          auto-compaction-mode: "periodic"
+          auto-compaction-retention: "1h"
+
+          # 0 means "use default" (keep it simple unless you want a hard quota)
+          quota-backend-bytes: 0
+
+  - id: install-etcd-service
+    type: install_services
+    units:
+      - name: globular-etcd.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular etcd
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/etcd
+          ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/etcd
+          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/etcd
+          ExecStart={{.Prefix}}/bin/etcd --config-file {{.StateDir}}/config/etcd.yaml
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-etcd
+    type: enable_services
+    services:
+      - globular-etcd.service
+
+  - id: start-etcd
+    type: start_services
+    services:
+      - globular-etcd.service
+    restart_on_files:
+      globular-etcd.service:
+        - "{{.StateDir}}/config/etcd.yaml"
+    binaries:
+      globular-etcd.service: etcd
+
+  - id: health-etcd
+    type: health_checks
+    services:
+      - globular-etcd.service

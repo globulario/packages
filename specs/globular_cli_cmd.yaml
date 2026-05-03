@@ -1,0 +1,60 @@
+version: 1
+
+metadata:
+  name: globular_cli
+  version: "0.0.1"
+  kind: command
+  description: "Globular platform CLI — bootstraps clusters, manages packages, controls services, and handles DNS."
+  keywords: [globularcli, cli, cluster, package-management, bootstrap]
+  license: MIT
+
+# Explicit entrypoint: the binary is installed as "globularcli", not "globular_cli_cmd"
+entrypoint: bin/globularcli
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install globularcli binary from the packaged payload
+  # The payload contains bin/globularcli (not bin/globular_cli_cmd)
+  - id: install-globularcli-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide the desired command name: /usr/local/bin/globular
+  - id: install-globular-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/globular"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/globularcli" "$@"

@@ -1,0 +1,127 @@
+version: 1
+
+metadata:
+  name: sidekick
+  version: "7.0.0"
+  kind: infrastructure
+  description: "MinIO Sidekick load balancer for distributing S3 requests across storage nodes."
+  keywords: [sidekick, minio, load-balancer, s3, proxy]
+  license: AGPL-3.0
+  entrypoint: sidekick
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/sidekick"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-sidekick-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-sidekick-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/sidekick/sidekick.env"
+        owner: globular
+        group: globular
+        mode: 0644
+        atomic: true
+        content: |
+          # Sidekick configuration for MinIO metrics proxy
+          # This file is read by globular-sidekick.service via EnvironmentFile=
+
+          # Listening address for the sidekick proxy (metrics at /.prometheus/metrics)
+          SIDEKICK_ADDRESS=127.0.0.1:8081
+
+          # MinIO backend URL
+          SIDEKICK_BACKEND=https://{{.NodeIP}}:9000
+
+          # Health check path appended to each backend URL
+          SIDEKICK_HEALTH_PATH=/minio/health/ready
+
+          # Health check interval
+          SIDEKICK_HEALTH_DURATION=10s
+
+          # Disable TLS verification for self-signed MinIO certs
+          SIDEKICK_INSECURE=true
+
+  - id: install-sidekick-service
+    type: install_services
+    units:
+      - name: globular-sidekick.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Sidekick (MinIO metrics proxy)
+          After=globular-minio.service
+          Wants=globular-minio.service
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          EnvironmentFile=-{{.StateDir}}/sidekick/sidekick.env
+          ExecStart={{.Prefix}}/bin/sidekick \
+            --address ${SIDEKICK_ADDRESS} \
+            --health-path ${SIDEKICK_HEALTH_PATH} \
+            --health-duration ${SIDEKICK_HEALTH_DURATION} \
+            --insecure \
+            --log \
+            ${SIDEKICK_BACKEND}
+          Restart=on-failure
+          RestartSec=5
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-sidekick
+    type: enable_services
+    services:
+      - globular-sidekick.service
+
+  - id: start-sidekick
+    type: start_services
+    services:
+      - globular-sidekick.service
+    restart_on_files:
+      globular-sidekick.service:
+        - "{{.StateDir}}/sidekick/sidekick.env"
+    binaries:
+      globular-sidekick.service: sidekick
+
+  - id: health-sidekick
+    type: health_checks
+    services:
+      - globular-sidekick.service

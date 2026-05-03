@@ -1,0 +1,111 @@
+version: 1
+
+metadata:
+  name: authentication
+  profiles: [core, compute]
+  priority: 1000
+
+service:
+  name: authentication
+  exec: authentication_server
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/authentication"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates must be provisioned by Day-0 bootstrap)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      # INV-PKI-1: Removed obsolete config/tls directory - all certs under pki/
+
+  - id: install-authentication-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: ensure-authentication-config
+    type: ensure_service_config
+    service_name: authentication
+    exec: authentication_server
+    address_host: auto
+    rewrite_if_out_of_range: true
+
+  - id: install-authentication-service
+    type: install_services
+    units:
+      - name: globular-authentication.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular authentication
+          After=network-online.target globular-event.service globular-ldap.service globular-rbac.service globular-resource.service
+          Wants=network-online.target globular-event.service globular-ldap.service globular-rbac.service globular-resource.service
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+          ExecStart={{.Prefix}}/bin/authentication_server
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-authentication
+    type: enable_services
+    services:
+      - globular-authentication.service
+
+  - id: start-authentication
+    type: start_services
+    services:
+      - globular-authentication.service
+    binaries:
+      globular-authentication.service: authentication_server
+
+  - id: health-authentication
+    type: health_checks
+    services:
+      - globular-authentication.service

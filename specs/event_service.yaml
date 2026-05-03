@@ -1,0 +1,111 @@
+version: 1
+
+metadata:
+  name: event
+  profiles: [core, compute]
+  priority: 4
+
+service:
+  name: event
+  exec: event_server
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/event"
+        owner: globular
+        group: globular
+        mode: 0750
+
+      # TLS directories (certificates must be provisioned by Day-0 bootstrap)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      # INV-PKI-1: Removed obsolete config/tls directory - all certs under pki/
+
+  - id: install-event-payload
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: ensure-event-config
+    type: ensure_service_config
+    service_name: event
+    exec: event_server
+    address_host: auto
+    rewrite_if_out_of_range: true
+
+  - id: install-event-service
+    type: install_services
+    units:
+      - name: globular-event.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular event
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
+
+          ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready"; exit 1'
+          ExecStart={{.Prefix}}/bin/event_server
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-event
+    type: enable_services
+    services:
+      - globular-event.service
+
+  - id: start-event
+    type: start_services
+    services:
+      - globular-event.service
+    binaries:
+      globular-event.service: event_server
+
+  - id: health-event
+    type: health_checks
+    services:
+      - globular-event.service

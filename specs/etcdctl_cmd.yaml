@@ -1,0 +1,60 @@
+version: 1
+
+metadata:
+  name: etcdctl
+  version: "3.5.14"
+  kind: command
+  description: "CLI client for etcd — inspects keys, manages cluster membership, and creates snapshots."
+  keywords: [etcdctl, etcd, cli, cluster-management, snapshot]
+  license: Apache-2.0
+
+# etcdctl CLI tool — packaged alongside etcd but as a separate command package
+# so it can be declared as a dependency by services like backup-manager.
+entrypoint: bin/etcdctl
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install etcdctl binary from the packaged payload
+  - id: install-etcdctl-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/etcdctl
+  - id: install-etcdctl-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/etcdctl"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/etcdctl" "$@"

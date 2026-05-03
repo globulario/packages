@@ -1,0 +1,179 @@
+version: 1
+
+metadata:
+  name: minio
+  version: "0.0.1"
+  kind: infrastructure
+  description: "S3-compatible object storage server for backup artifacts, media files, and blob data."
+  keywords: [minio, object-storage, s3, backup, blob]
+  license: AGPL-3.0
+  entrypoint: minio
+  provides_capabilities: [object-store]
+  health_check:
+    unit: globular-minio.service
+    port: 9000
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/minio"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.MinioDataDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/objectstore"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/webroot"
+        owner: globular
+        group: globular
+        mode: 0755
+
+      # TLS directories (INV-PKI-1: canonical paths)
+      - path: "{{.StateDir}}/pki"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/.minio/certs"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-minio-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-minio-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/minio/minio.env"
+        owner: globular
+        group: globular
+        mode: 0644
+        atomic: true
+        skip_if_exists: true
+        content: |
+          MINIO_ROOT_USER=globular
+          MINIO_ROOT_PASSWORD=globularadmin
+          MINIO_VOLUMES={{.MinioDataDir}}
+
+          # TLS Configuration - MinIO will use certificates from ${HOME}/.minio/certs
+          # For 'globular' user, this is {{.StateDir}}/.minio/certs
+          # Certificates must be named: public.crt and private.key
+          MINIO_CERT_FILE={{.StateDir}}/.minio/certs/public.crt
+          MINIO_KEY_FILE={{.StateDir}}/.minio/certs/private.key
+
+          # Bind addresses (will serve HTTPS when certs are present)
+          MINIO_OPTS=--address {{.NodeIP}}:9000 --console-address 127.0.0.1:9001
+
+          # Allow unauthenticated access to metrics (scraped by Prometheus via Sidekick)
+          MINIO_PROMETHEUS_AUTH_TYPE=public
+
+  # Standard credentials file for clients (node-agent, gateway, etc.)
+  - id: install-minio-credentials
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/minio/credentials"
+        owner: globular
+        group: globular
+        mode: 0600
+        atomic: true
+        skip_if_exists: true
+        content: |
+          globular:globularadmin
+
+  - id: install-minio-service
+    type: install_services
+    units:
+      - name: globular-minio.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular MinIO
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/minio {{.MinioDataDir}}
+          ExecStartPre=+/usr/bin/chown -R globular:globular {{.StateDir}}/minio
+          ExecStartPre=+/usr/bin/chown -R globular:globular {{.MinioDataDir}}
+          ExecStartPre=+/usr/bin/chmod 0700 {{.StateDir}}/minio
+          ExecStartPre=+/usr/bin/chmod 0700 {{.MinioDataDir}}
+          ExecStartPre=/usr/bin/test -w {{.MinioDataDir}}
+          EnvironmentFile=-{{.StateDir}}/minio/minio.env
+          ExecStart={{.Prefix}}/bin/minio server {{.MinioDataDir}} --address {{.NodeIP}}:9000 --console-address 127.0.0.1:9001
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-minio
+    type: enable_services
+    services:
+      - globular-minio.service
+
+  # TLS symlinks + credentials + contract MUST exist before MinIO starts,
+  # otherwise it boots in HTTP mode instead of HTTPS.
+  - id: run-pre-start
+    type: run_script
+    script: pre-start.sh
+
+  - id: start-minio
+    type: start_services
+    services:
+      - globular-minio.service
+    restart_on_files:
+      globular-minio.service:
+        - "{{.StateDir}}/minio/minio.env"
+    binaries:
+      globular-minio.service: minio
+
+  - id: health-minio
+    type: health_checks
+    services:
+      - globular-minio.service
+
+  - id: run-post-install
+    type: run_script
+    script: post-install.sh

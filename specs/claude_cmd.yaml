@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: claude
+  version: "2.1.80"
+  kind: command
+  description: "Anthropic Claude CLI — used by ai-executor to route prompts to a Claude Max / OAuth subscription."
+  keywords: [claude, anthropic, ai, cli, llm]
+  license: Proprietary
+
+# Explicit entrypoint: the binary is installed as "claude"
+entrypoint: bin/claude
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install the claude binary from the packaged payload
+  - id: install-claude-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/claude
+  - id: install-claude-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/claude"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/claude" "$@"

@@ -1,0 +1,252 @@
+version: 1
+
+metadata:
+  name: prometheus
+  version: "3.5.1"
+  kind: infrastructure
+  description: "Time-series monitoring and alerting system for cluster metrics collection."
+  keywords: [prometheus, monitoring, metrics, alerting, time-series]
+  license: Apache-2.0
+  entrypoint: prometheus
+  extra_binaries: [promtool]
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/prometheus"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/prometheus/data"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/prometheus/targets"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/prometheus/peers"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/prometheus/rules"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-prometheus-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-prometheus-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/prometheus/prometheus.yml"
+        owner: globular
+        group: globular
+        mode: 0644
+        atomic: true
+        skip_if_exists: true
+        content: |
+          # Globular Prometheus configuration
+          # Scrapes all Globular gRPC services that expose /metrics
+
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+
+          rule_files:
+            - "{{.StateDir}}/prometheus/rules/*.yml"
+
+          alerting:
+            alertmanagers:
+              - static_configs:
+                  - targets: ["{{.NodeIP}}:9093"]
+
+          scrape_configs:
+            # Prometheus self-monitoring
+            - job_name: "prometheus"
+              static_configs:
+                - targets: ["{{.NodeIP}}:9090"]
+
+            # Envoy admin stats (always on :9901)
+            - job_name: "envoy"
+              metrics_path: /stats/prometheus
+              static_configs:
+                - targets: ["127.0.0.1:9901"]
+                  labels:
+                    instance: "{{.NodeIP}}:9901"
+
+            # Node exporter (if installed, standard port :9100)
+            - job_name: "node"
+              static_configs:
+                - targets: ["127.0.0.1:9100"]
+                  labels:
+                    instance: "{{.NodeIP}}:9100"
+
+            # etcd (TLS on :2379)
+            - job_name: "etcd"
+              scheme: https
+              tls_config:
+                ca_file: "{{.StateDir}}/pki/ca.pem"
+                cert_file: "{{.StateDir}}/pki/issued/services/service.crt"
+                key_file: "{{.StateDir}}/pki/issued/services/service.key"
+              static_configs:
+                - targets: ["{{.NodeIP}}:2379"]
+
+            # Sidekick proxy metrics (request counts, bytes, errors)
+            - job_name: "sidekick"
+              metrics_path: /.prometheus/metrics
+              static_configs:
+                - targets: ["127.0.0.1:8081"]
+                  labels:
+                    instance: "{{.NodeIP}}:8081"
+
+            # Alertmanager metrics
+            - job_name: "alertmanager"
+              static_configs:
+                - targets: ["{{.NodeIP}}:9093"]
+
+            # MinIO internal metrics (buckets, S3 ops, storage)
+            # Requires MINIO_PROMETHEUS_AUTH_TYPE=public in minio.env
+            - job_name: "minio"
+              metrics_path: /minio/v2/metrics/cluster
+              scheme: https
+              tls_config:
+                ca_file: "{{.StateDir}}/pki/ca.pem"
+                insecure_skip_verify: true
+              static_configs:
+                - targets: ["{{.NodeIP}}:9000"]
+
+            # ScyllaDB (plain HTTP on :9180)
+            # ScyllaDB binds to the host's listen_address, not 127.0.0.1.
+            - job_name: "scylla"
+              static_configs:
+                - targets: ["{{.NodeIP}}:9180"]
+
+            # Globular services — file-based discovery.
+            # Each gRPC service auto-registers by writing a target file
+            # into the targets/ directory when it starts.
+            - job_name: "globular"
+              file_sd_configs:
+                - files:
+                    - "{{.StateDir}}/prometheus/targets/*.yaml"
+                    - "{{.StateDir}}/prometheus/targets/*.json"
+                  refresh_interval: 30s
+              relabel_configs:
+                # Prefer the job label from the target file over the job_name
+                - source_labels: [job]
+                  target_label: job
+
+            # Cluster federation — pull metrics from every node's Prometheus so
+            # each Prometheus has a cluster-wide view. The list is defined via
+            # file_sd (peers.yaml) so it can be updated without editing this
+            # file (e.g. by a future cluster-aware peer-list generator).
+            # honor_labels=true preserves the instance/node labels the source
+            # Prometheus attached when it scraped the underlying service.
+            - job_name: "federate-cluster"
+              scrape_interval: 30s
+              honor_labels: true
+              metrics_path: /federate
+              params:
+                match[]:
+                  # Health + uptime signals
+                  - '{__name__="up"}'
+                  - '{__name__=~"process_(cpu_seconds_total|resident_memory_bytes|start_time_seconds)"}'
+                  # gRPC request/error/latency roll-ups
+                  - '{__name__=~"grpc_server_(handled_total|handling_seconds_(bucket|sum|count))"}'
+                  # Go runtime
+                  - '{__name__=~"go_goroutines|go_memstats_heap_inuse_bytes"}'
+              file_sd_configs:
+                - files:
+                    - "{{.StateDir}}/prometheus/peers/*.yaml"
+                    - "{{.StateDir}}/prometheus/peers/*.json"
+                  refresh_interval: 30s
+              relabel_configs:
+                # Drop the self-scrape to avoid federation-loop amplification.
+                - source_labels: [__address__]
+                  regex: "{{.NodeIP}}:9090"
+                  action: drop
+
+  - id: install-prometheus-service
+    type: install_services
+    units:
+      - name: globular-prometheus.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Prometheus
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/prometheus/data
+          ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/prometheus/data
+          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/prometheus/data
+          ExecStart={{.Prefix}}/bin/prometheus \
+            --config.file={{.StateDir}}/prometheus/prometheus.yml \
+            --storage.tsdb.path={{.StateDir}}/prometheus/data \
+            --storage.tsdb.retention.time=15d \
+            --web.listen-address=0.0.0.0:9090 \
+            --web.enable-lifecycle
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-prometheus
+    type: enable_services
+    services:
+      - globular-prometheus.service
+
+  - id: start-prometheus
+    type: start_services
+    services:
+      - globular-prometheus.service
+    restart_on_files:
+      globular-prometheus.service:
+        - "{{.StateDir}}/prometheus/prometheus.yml"
+    binaries:
+      globular-prometheus.service: prometheus
+
+  - id: health-prometheus
+    type: health_checks
+    services:
+      - globular-prometheus.service
+
+  - id: run-post-install
+    type: run_script
+    script: post-install.sh
