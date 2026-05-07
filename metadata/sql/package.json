@@ -16,5 +16,19 @@
   "priority": 1000,
   "systemd_unit": "globular-sql.service",
   "health_check_unit": "globular-sql.service",
-  "entrypoint_checksum": "sha256:b56c6a2ae956e6fe99c4b8a07b7c275b41cf0e2f8aec5503524ee33d0ebd6d40"
+  "entrypoint_checksum": "sha256:b56c6a2ae956e6fe99c4b8a07b7c275b41cf0e2f8aec5503524ee33d0ebd6d40",
+  "native_dependencies": {
+    "linux": {
+      "debian": {
+        "runtime_packages": ["unixodbc"],
+        "build_packages": ["unixodbc-dev"],
+        "libraries": ["libodbc.so.2"]
+      },
+      "rhel": {
+        "runtime_packages": ["unixODBC"],
+        "build_packages": ["unixODBC-devel"],
+        "libraries": ["libodbc.so.2"]
+      }
+    }
+  }
 }

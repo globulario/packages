@@ -1,0 +1,88 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: ldap
+package: ldap
+package_kind: service
+summary: >
+  LDAP directory service providing user and group identity management backed by
+  ScyllaDB. All access is authenticated via authentication service and authorized
+  via RBAC. Used by authentication service for external identity federation.
+
+owns:
+  etcd_keys:
+    - /globular/services/ldap/config
+    - /globular/services/ldap/instances/{node}
+  systemd_units:
+    - globular-ldap.service
+  filesystem_paths: []
+  event_types:
+    - ldap.entry.created
+    - ldap.entry.deleted
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/ldap/config
+
+writes:
+  etcd_keys:
+    - /globular/services/ldap/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists LDAP directory entries in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all LDAP management requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for directory operations.
+
+emits:
+  - ldap.entry.created
+  - ldap.entry.deleted
+
+subscribes: []
+
+invariants:
+  - ldap.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_ldap_writes
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, LDAP directory reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If ldap is down, identity federation is suspended; local accounts continue working."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestLdapAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/ldap/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

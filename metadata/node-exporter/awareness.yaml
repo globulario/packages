@@ -1,0 +1,65 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: node-exporter
+package: node-exporter
+package_kind: infrastructure
+summary: >
+  Prometheus node exporter. Collects host-level metrics (CPU, memory, disk, network)
+  and exposes them on a scrape endpoint for Prometheus to collect. Runs on every
+  node. Binary replacement requires a service restart to avoid running a deleted
+  binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-node-exporter.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/node-exporter/config
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-node-exporter.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-node-exporter.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "If node-exporter is down, Prometheus loses host metrics for this node; the cluster continues operating."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestNodeExporterRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/node-exporter/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

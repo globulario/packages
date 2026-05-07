@@ -1,0 +1,60 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: restic
+package: restic
+package_kind: command
+summary: >
+  restic backup CLI for incremental snapshot creation and deduplication. Used by
+  backup-manager for ScyllaDB and filesystem snapshot backups. Standalone CLI with
+  no systemd unit. Executes only within the node-agent supervisor boundary.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/restic
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+  - store_restic_passwords_in_etcd
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/restic; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If restic is absent, snapshot-based backups are suspended; the cluster continues operating."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

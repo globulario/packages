@@ -1,0 +1,70 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: sctool
+package: sctool
+package_kind: command
+summary: >
+  Scylla Manager CLI tool (sctool) for managing ScyllaDB backups, repairs, and
+  cluster operations via scylla-manager. Used by operators and scripts for
+  ScyllaDB lifecycle management. Standalone CLI with no systemd unit. Executes
+  only within the node-agent supervisor boundary.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/sctool
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: scylla-manager
+    phase: day1
+    required: true
+    reason: sctool communicates with scylla-manager API; without it the tool has no target.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/sctool; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+  - id: scylla_manager_unavailable
+    description: >
+      If scylla-manager is not running, sctool commands fail with connection errors.
+    diagnosis: "Check globular-scylla-manager.service status."
+    remedy: "Start scylla-manager; verify ScyllaDB is healthy."
+
+safe_degraded_modes:
+  - "If sctool is absent, operator ScyllaDB management tooling is impacted; the cluster continues operating."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

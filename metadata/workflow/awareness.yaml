@@ -1,0 +1,105 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: workflow
+package: workflow
+package_kind: service
+summary: >
+  Workflow coordination service running on port 10004. Every meaningful cluster
+  mutation MUST go through the workflow service. Workflows are IDEMPOTENT and
+  MUST reach a terminal state (SUCCEEDED or FAILED). The controller DECIDES,
+  the Workflow Service COORDINATES, and Node Agents EXECUTE. No inline state
+  changes that bypass workflow are permitted.
+
+owns:
+  etcd_keys:
+    - /globular/workflows/{workflow_id}
+    - /globular/services/workflow/config
+    - /globular/services/workflow/instances/{node}
+  systemd_units:
+    - globular-workflow.service
+  filesystem_paths: []
+  event_types:
+    - workflow.step.started
+    - workflow.step.completed
+    - workflow.step.failed
+    - workflow.succeeded
+    - workflow.failed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/workflow/config
+    - /globular/nodes/{node_id}/status
+
+writes:
+  etcd_keys:
+    - /globular/workflows/{workflow_id}
+    - /globular/services/workflow/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads and writes workflow state to etcd as the durable state store.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists workflow history and audit records in ScyllaDB.
+
+emits:
+  - workflow.step.started
+  - workflow.step.completed
+  - workflow.step.failed
+  - workflow.succeeded
+  - workflow.failed
+
+subscribes: []
+
+invariants:
+  - workflow.all_mutations_via_workflow
+  - workflow.idempotent
+  - workflow.must_reach_terminal_state
+  - workflow.executor_lease_must_expire_on_crash
+
+forbidden_fixes:
+  - inline_state_change_bypassing_workflow
+  - auto_rollback_on_crash
+  - workflow_with_no_terminal_state
+
+known_failure_modes:
+  - id: executor_lease_stall
+    description: >
+      A workflow crash leaves a stale executor lease. Retry attempts fail for up
+      to 15 minutes until the lease TTL expires.
+    diagnosis: "Check /globular/workflows/{id} for RUNNING state with stale timestamp; compare against lease TTL."
+    remedy: "Wait for lease TTL expiry (15 min) or manually delete stale workflow key in etcd."
+
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, workflow history cannot be persisted. Active
+      workflow steps continue; audit records are buffered or lost.
+    diagnosis: "Check scylla-server.service status; inspect workflow logs."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If workflow service is down, no new cluster mutations can be dispatched; running services continue in steady state."
+
+remediation_workflows:
+  - workflow-lease-recovery
+
+required_tests:
+  - TestWorkflowIdempotent
+  - TestWorkflowReachesTerminalState
+  - TestNoInlineStateMutations
+  - TestExecutorLeaseExpiresOnCrash
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/workflows/
+  - etcd:write:/globular/services/workflow/instances/
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: true

@@ -1,0 +1,76 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: discovery
+package: discovery
+package_kind: service
+summary: >
+  Service discovery — maps service names to etcd-resolved endpoints for mesh
+  routing. Priority 3 (early startup). All other services that need to locate
+  peers in the cluster resolve addresses through discovery. No hardcoded
+  addresses are permitted — all endpoints come from etcd at runtime.
+
+owns:
+  etcd_keys:
+    - /globular/services/discovery/config
+    - /globular/services/discovery/instances/{node}
+  systemd_units:
+    - globular-discovery.service
+  filesystem_paths: []
+  event_types:
+    - discovery.service.registered
+    - discovery.service.deregistered
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+    - /globular/services/{service_id}/instances/{node}
+
+writes:
+  etcd_keys:
+    - /globular/services/discovery/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: All endpoint mappings are resolved from etcd; discovery cannot function without it.
+
+emits:
+  - discovery.service.registered
+  - discovery.service.deregistered
+
+subscribes: []
+
+invariants:
+  - discovery.no_hardcoded_addresses
+  - discovery.all_endpoints_from_etcd
+
+forbidden_fixes:
+  - hardcode_service_addresses
+  - hardcode_grpc_ports
+
+known_failure_modes:
+  - id: etcd_partition
+    description: >
+      If etcd is partitioned, discovery returns stale or empty endpoint maps.
+      Services that have cached endpoints continue operating; new connections fail.
+    diagnosis: "Check etcd cluster health; inspect discovery logs for watch errors."
+    remedy: "Restore etcd quorum; discovery re-watches endpoints automatically."
+
+safe_degraded_modes:
+  - "Services with cached endpoint maps continue operating during brief etcd partitions."
+
+remediation_workflows: []
+
+required_tests:
+  - TestNoHardcodedAddresses
+  - TestAllEndpointsFromEtcd
+
+required_permissions:
+  - etcd:read:/globular/services/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

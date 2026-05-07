@@ -1,0 +1,90 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: catalog
+package: catalog
+package_kind: service
+summary: >
+  Service catalog that indexes available Globular services and their metadata.
+  Backed by ScyllaDB for persistence. All access is authenticated and authorized.
+  Provides discovery-level information about what services are available in the
+  cluster ecosystem.
+
+owns:
+  etcd_keys:
+    - /globular/services/catalog/config
+    - /globular/services/catalog/instances/{node}
+  systemd_units:
+    - globular-catalog.service
+  filesystem_paths: []
+  event_types:
+    - catalog.entry.added
+    - catalog.entry.removed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/catalog/config
+    - /globular/resources/DesiredService/{name}
+
+writes:
+  etcd_keys:
+    - /globular/services/catalog/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and cluster service list from etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists catalog entries in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all catalog modification requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces who can add or remove catalog entries.
+
+emits:
+  - catalog.entry.added
+  - catalog.entry.removed
+
+subscribes: []
+
+invariants:
+  - catalog.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_catalog_writes
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, catalog reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "Catalog reads may be served from in-memory cache for a short time."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestCatalogAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/catalog/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

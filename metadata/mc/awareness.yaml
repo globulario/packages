@@ -1,0 +1,65 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: mc
+package: mc
+package_kind: command
+summary: >
+  MinIO Client (mc) CLI binary for direct MinIO bucket operations. Used by
+  operators and scripts for manual inspection, data migration, and troubleshooting.
+  MinIO is a cache — mc must never be used to establish MinIO as sole artifact
+  authority. Standalone CLI, no systemd unit.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/mc
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: minio
+    phase: day1
+    required: true
+    reason: mc communicates directly with MinIO; without MinIO it has no target.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - mc.minio_not_sole_truth
+
+forbidden_fixes:
+  - treat_minio_as_artifact_authority_via_mc
+  - execute_outside_node_agent_supervisor
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/mc; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If mc is absent, the cluster continues operating; only operator MinIO tooling is impacted."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

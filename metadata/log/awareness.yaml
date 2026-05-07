@@ -1,0 +1,76 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: log
+package: log
+package_kind: service
+summary: >
+  Centralized log aggregation and query service. Collects structured log records
+  from all services and stores them in ScyllaDB for persistent queryable history.
+  Provides log search, ring buffer query, and verbosity control RPCs.
+
+owns:
+  etcd_keys:
+    - /globular/services/log/config
+    - /globular/services/log/instances/{node}
+  systemd_units:
+    - globular-log.service
+  filesystem_paths: []
+  event_types:
+    - log.record.ingested
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/log/config
+
+writes:
+  etcd_keys:
+    - /globular/services/log/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists log records in ScyllaDB for durable query history.
+
+emits:
+  - log.record.ingested
+
+subscribes: []
+
+invariants:
+  - log.scylladb_is_persistent_store
+
+forbidden_fixes:
+  - store_logs_in_etcd_values
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, log records are dropped or buffered in memory.
+      The cluster continues operating; log history is incomplete during the outage.
+    diagnosis: "Check scylla-server.service status; inspect log service buffer metrics."
+    remedy: "Restore ScyllaDB quorum; log service reconnects and resumes persistence."
+
+safe_degraded_modes:
+  - "If log service is down, services continue operating; log records may be lost for the outage period."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestLogPersistenceInScyllaDB
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/log/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

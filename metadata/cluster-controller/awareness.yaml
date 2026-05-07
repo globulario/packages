@@ -1,0 +1,126 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: cluster-controller
+package: cluster-controller
+package_kind: service
+summary: >
+  Central control plane service running on port 12000. The controller DECIDES
+  desired state, the Workflow Service COORDINATES, and Node Agents EXECUTE.
+  It runs leader election, reconciliation, and BOM release management. Profiles:
+  control-plane. MUST NOT use os/exec, syscall, or systemctl — all cluster mutations
+  flow through workflows. Enforces founding quorum: first 3 nodes must have
+  core+control-plane+storage profiles.
+
+owns:
+  etcd_keys:
+    - /globular/resources/DesiredService/{name}
+    - /globular/resources/ServiceRelease/{name}
+    - /globular/services/cluster-controller/config
+    - /globular/services/cluster-controller/instances/{node}
+  systemd_units:
+    - globular-cluster-controller.service
+  filesystem_paths:
+    - /var/lib/globular/bootstrap.enabled
+  event_types:
+    - controller.reconcile.started
+    - controller.reconcile.completed
+    - controller.leader.elected
+    - controller.bom.released
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/nodes/{node_id}/status
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/ingress/v1/spec
+
+writes:
+  etcd_keys:
+    - /globular/resources/DesiredService/{name}
+    - /globular/resources/ServiceRelease/{name}
+    - /globular/services/cluster-controller/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: etcd is the sole source of truth for all cluster state reads and writes.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists release history and controller state in ScyllaDB.
+
+  - service: minio
+    phase: day0
+    required: true
+    reason: Reads package artifacts from MinIO for BOM release management.
+
+  - service: workflow
+    phase: day1
+    required: true
+    reason: All cluster mutations are dispatched through the workflow service.
+
+emits:
+  - controller.reconcile.started
+  - controller.reconcile.completed
+  - controller.leader.elected
+  - controller.bom.released
+
+subscribes: []
+
+invariants:
+  - controller.no_exec_syscall_systemctl
+  - controller.all_mutations_via_workflow
+  - controller.workflows_idempotent
+  - controller.founding_quorum_enforced
+  - controller.leader_only_domain_reconciler
+  - controller.leader_only_dns_reconciler
+
+forbidden_fixes:
+  - use_os_exec_in_controller
+  - inline_state_change_bypassing_workflow
+  - remove_etcd_from_any_node
+  - auto_rollback_on_crash
+  - hardcode_service_ports
+
+known_failure_modes:
+  - id: leader_election_stall
+    description: >
+      If fewer than 2 control-plane nodes are reachable, leader election stalls
+      and reconciliation stops. The cluster continues running in steady state but
+      no new desired-state changes are applied.
+    diagnosis: "Check /globular/resources/ keys for stale leases; verify control-plane node health."
+    remedy: "Restore at least 2 control-plane nodes; leader election resumes automatically."
+
+  - id: domain_reconciler_conflict
+    description: >
+      If domain or DNS reconcilers run on non-leader nodes, they can conflict
+      and overwrite each other's state, causing domain record flickering.
+    diagnosis: "Check controller logs for 'not leader' guard; verify only one node applies domain changes."
+    remedy: "Ensure domain and DNS reconcilers are gated behind leader check (already enforced in code)."
+
+safe_degraded_modes:
+  - "If controller is down, running services continue; no new desired-state changes are applied."
+  - "Node agents operate from last known desired state cached in etcd."
+
+remediation_workflows:
+  - leader-election-recovery
+  - founding-quorum-repair
+
+required_tests:
+  - TestNoExecInController
+  - TestAllMutationsViaWorkflow
+  - TestFoundingQuorumEnforced
+  - TestLeaderOnlyDomainReconciler
+
+required_permissions:
+  - etcd:read:/globular/
+  - etcd:write:/globular/resources/
+  - etcd:write:/globular/services/cluster-controller/instances/
+  - minio:read:packages
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: true

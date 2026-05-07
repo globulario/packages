@@ -1,0 +1,77 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: prometheus
+package: prometheus
+package_kind: infrastructure
+summary: >
+  Prometheus metrics collection and alerting engine. Scrapes metrics from all
+  cluster services and node-exporters, evaluates alert rules, and forwards firing
+  alerts to alertmanager. Binary replacement requires a service restart to avoid
+  running a deleted binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-prometheus.service
+  filesystem_paths:
+    - /var/lib/globular/prometheus/
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/prometheus/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: node-exporter
+    phase: day1
+    required: false
+    reason: Scrapes host metrics from node-exporter; operates with reduced visibility if absent.
+    safe_escape_hatch: Prometheus continues collecting other service metrics without node-exporter.
+
+  - service: alertmanager
+    phase: day1
+    required: false
+    reason: Forwards firing alerts to alertmanager; if absent alerts are evaluated but not routed.
+    safe_escape_hatch: Alert evaluation continues; routing is suspended until alertmanager is restored.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-prometheus.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-prometheus.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "If prometheus is down, metrics collection stops; the cluster continues operating."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestPrometheusRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/prometheus/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,99 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: rbac
+package: rbac
+package_kind: service
+summary: >
+  Role-Based Access Control enforcement service running on port 10104. Intercepts
+  all gRPC RPCs after authentication and enforces permission rules. Every RPC in
+  the system must have a (globular.auth.authz) annotation. RBAC intercepts after
+  authentication — the interceptor chain is: auth → RBAC → audit. Cluster roles
+  are loaded from /var/lib/globular/policy/rbac/cluster-roles.json.
+
+owns:
+  etcd_keys:
+    - /globular/services/rbac/config
+    - /globular/services/rbac/instances/{node}
+  systemd_units:
+    - globular-rbac.service
+  filesystem_paths:
+    - /var/lib/globular/policy/rbac/cluster-roles.json
+  event_types:
+    - rbac.access.granted
+    - rbac.access.denied
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/rbac/config
+
+writes:
+  etcd_keys:
+    - /globular/services/rbac/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists role bindings and policy definitions in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: RBAC validates tokens issued by authentication; token must be verified before access check.
+
+emits:
+  - rbac.access.granted
+  - rbac.access.denied
+
+subscribes: []
+
+invariants:
+  - rbac.all_rpcs_have_authz_annotation
+  - rbac.interceptor_chain_auth_then_rbac_then_audit
+  - rbac.no_permission_escalation
+
+forbidden_fixes:
+  - bypass_rbac_interceptor
+  - grant_wildcard_permissions
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, RBAC cannot load role bindings and denies all
+      requests until policy is recovered.
+    diagnosis: "Check scylla-server.service status; inspect rbac logs for policy load errors."
+    remedy: "Restore ScyllaDB quorum; rbac reloads policy on reconnect."
+
+  - id: missing_authz_annotation
+    description: >
+      If an RPC is deployed without a (globular.auth.authz) annotation, the RBAC
+      interceptor has no policy to evaluate and may default to deny.
+    diagnosis: "Run make check-services; grep for missing authz annotations in proto files."
+    remedy: "Add the (globular.auth.authz) annotation to the proto RPC definition."
+
+safe_degraded_modes:
+  - "If rbac service is down, all authenticated RPCs are rejected; cluster state is read-only."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestAllRpcsHaveAuthzAnnotation
+  - TestInterceptorChainOrder
+  - TestScyllaDBRequiredForPolicy
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/rbac/instances/
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

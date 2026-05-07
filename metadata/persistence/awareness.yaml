@@ -1,0 +1,86 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: persistence
+package: persistence
+package_kind: service
+summary: >
+  Generic persistence service providing key-value and document storage backed by
+  ScyllaDB. Used by other services that need durable structured storage without
+  managing their own ScyllaDB schema. All access is authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/persistence/config
+    - /globular/services/persistence/instances/{node}
+  systemd_units:
+    - globular-persistence.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/persistence/config
+
+writes:
+  etcd_keys:
+    - /globular/services/persistence/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: All persistence data is stored in ScyllaDB; service cannot function without it.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all storage requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for stored data namespaces.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - persistence.all_rpcs_have_authz_annotation
+  - persistence.scylladb_is_sole_store
+
+forbidden_fixes:
+  - bypass_rbac_for_persistence
+  - store_data_in_etcd_values
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, all persistence reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If persistence service is down, dependent services degrade; the cluster continues operating."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestPersistenceAuthzAnnotations
+  - TestScyllaDBRequiredForPersistence
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/persistence/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

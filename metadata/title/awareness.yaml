@@ -1,0 +1,86 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: title
+package: title
+package_kind: service
+summary: >
+  Title index service providing fast title-based search and lookup backed by
+  ScyllaDB. Supports index rebuild operations for recovery. All access is
+  authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/title/config
+    - /globular/services/title/instances/{node}
+  systemd_units:
+    - globular-title.service
+  filesystem_paths: []
+  event_types:
+    - title.index.rebuilt
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/title/config
+
+writes:
+  etcd_keys:
+    - /globular/services/title/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists title index data in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all title search and management requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for index operations.
+
+emits:
+  - title.index.rebuilt
+
+subscribes: []
+
+invariants:
+  - title.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_title_queries
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, title index reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum; run index rebuild if data is stale."
+
+safe_degraded_modes:
+  - "If title service is down, the cluster continues operating; title search returns errors."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestTitleAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/title/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,82 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: ai-watcher
+package: ai-watcher
+package_kind: service
+summary: >
+  Event monitoring service for AI observability. Subscribes to the cluster event
+  bus and watches for anomalies, drift signals, and incident triggers. Forwards
+  relevant events to ai-executor for diagnosis. Supplementary — the cluster must
+  function without this service.
+
+owns:
+  etcd_keys:
+    - /globular/services/ai-watcher/config
+    - /globular/services/ai-watcher/instances/{node}
+  systemd_units:
+    - globular-ai-watcher.service
+  filesystem_paths: []
+  event_types:
+    - ai.watcher.anomaly.detected
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+
+writes:
+  etcd_keys:
+    - /globular/services/ai-watcher/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: event
+    phase: day1
+    required: true
+    reason: Subscribes to the cluster event bus to receive anomaly signals.
+
+emits:
+  - ai.watcher.anomaly.detected
+
+subscribes:
+  - node.package.failed
+  - node.heartbeat
+  - workflow.step.failed
+
+invariants:
+  - ai.watcher.read_only
+  - ai.watcher.cluster_operates_without_watcher
+
+forbidden_fixes:
+  - ai_watcher_mutates_cluster_state
+
+known_failure_modes:
+  - id: event_bus_disconnect
+    description: >
+      If the event service is unreachable, ai-watcher loses its subscription stream
+      and misses events until reconnected.
+    diagnosis: "Check ai-watcher logs for subscription errors; verify event service health."
+    remedy: "Restore event service; ai-watcher will resubscribe automatically."
+
+safe_degraded_modes:
+  - "If ai-watcher is down, the cluster continues operating through its deterministic convergence model."
+  - "Anomaly detection is suspended; deterministic health checks continue independently."
+
+remediation_workflows: []
+
+required_tests:
+  - TestWatcherIsReadOnly
+  - TestResubscribeOnEventBusReconnect
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/ai-watcher/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

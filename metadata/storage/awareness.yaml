@@ -1,0 +1,107 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: storage
+package: storage
+package_kind: service
+summary: >
+  Object storage service providing a Globular-native API over MinIO. Manages
+  buckets, objects, and storage policies. Metadata backed by ScyllaDB; blobs
+  stored in MinIO. MinIO is a cache — ScyllaDB and local POSIX CAS are
+  authoritative. All access is authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/storage/config
+    - /globular/services/storage/instances/{node}
+  systemd_units:
+    - globular-storage.service
+  filesystem_paths: []
+  event_types:
+    - storage.object.created
+    - storage.object.deleted
+    - storage.bucket.created
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/storage/config
+
+writes:
+  etcd_keys:
+    - /globular/services/storage/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists object metadata and bucket policies in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all storage requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces bucket-level access control policies.
+
+  - service: minio
+    phase: day1
+    required: true
+    reason: Stores object blobs in MinIO; required for all data reads and writes.
+
+emits:
+  - storage.object.created
+  - storage.object.deleted
+  - storage.bucket.created
+
+subscribes: []
+
+invariants:
+  - storage.all_rpcs_have_authz_annotation
+  - storage.minio_not_sole_truth
+
+forbidden_fixes:
+  - bypass_rbac_for_storage_writes
+  - treat_minio_as_sole_authority
+
+known_failure_modes:
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, object reads and writes fail. Metadata reads from
+      ScyllaDB continue.
+    diagnosis: "Check minio service health on port 9000."
+    remedy: "Restore MinIO quorum."
+
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, object metadata reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If storage service is down, the cluster continues operating; object operations are suspended."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestStorageAuthzAnnotations
+  - TestMinioNotSoleTruth
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/storage/instances/
+  - minio:read:storage
+  - minio:write:storage
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

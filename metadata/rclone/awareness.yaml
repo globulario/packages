@@ -1,0 +1,65 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: rclone
+package: rclone
+package_kind: command
+summary: >
+  rclone CLI for cloud storage sync and transfer. Used by backup-manager for
+  off-site backup transfer to remote object stores (S3, GCS, B2, etc.). Standalone
+  CLI with no systemd unit. Executes only within the node-agent supervisor boundary.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/rclone
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: minio
+    phase: day1
+    required: false
+    reason: rclone may be used to sync from MinIO; also works with external cloud providers.
+    safe_escape_hatch: Can operate against external remotes without MinIO.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+  - store_cloud_credentials_in_etcd
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/rclone; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If rclone is absent, off-site backup transfer is suspended; local backups continue."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

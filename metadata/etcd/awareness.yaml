@@ -1,0 +1,91 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: etcd
+package: etcd
+package_kind: infrastructure
+summary: >
+  Distributed key-value store — Layer 0 and the SOLE source of truth for all
+  cluster configuration, service endpoints, desired state, and node state. Runs
+  on ALL nodes without exception on port 2379 (standard protocol port). All
+  services depend on etcd. Quorum requirement: ALL nodes. Binary replacement
+  requires a service restart. Removing etcd from any node is forbidden.
+
+owns:
+  etcd_keys:
+    - /globular/
+  systemd_units:
+    - globular-etcd.service
+  filesystem_paths:
+    - /var/lib/globular/config/etcd.yaml
+    - /var/lib/etcd/
+  event_types:
+    - etcd.leader.changed
+    - etcd.member.joined
+    - etcd.member.left
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys:
+    - /globular/
+
+depends_on: []
+
+emits:
+  - etcd.leader.changed
+  - etcd.member.joined
+  - etcd.member.left
+
+subscribes: []
+
+invariants:
+  - etcd.runs_on_all_nodes
+  - etcd.quorum_requirement_all_nodes
+  - etcd.sole_source_of_truth
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - remove_etcd_from_any_node
+  - hardcode_etcd_endpoints_in_application_code
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+  - use_environment_variables_for_config
+
+known_failure_modes:
+  - id: quorum_loss
+    description: >
+      If more than half the etcd members are unreachable, the cluster loses quorum
+      and all etcd writes fail. The cluster enters a read-only degraded state.
+    diagnosis: "etcdctl endpoint health --cluster; check etcd member list."
+    remedy: "Restore failed etcd members; if data loss occurred, restore from etcd snapshot."
+
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-etcd.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-etcd.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "etcd read quorum is maintained if at least half+1 members are available."
+
+remediation_workflows:
+  - etcd-member-recovery
+  - etcd-snapshot-restore
+
+required_tests:
+  - TestEtcdRunsOnAllNodes
+  - TestNoHardcodedEtcdEndpoints
+  - TestEtcdRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/
+  - etcd:write:/globular/
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: true

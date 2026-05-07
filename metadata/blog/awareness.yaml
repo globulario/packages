@@ -1,0 +1,91 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: blog
+package: blog
+package_kind: service
+summary: >
+  Blog content service. Provides CRUD operations for blog posts and comments,
+  backed by ScyllaDB for persistent storage. All access is authenticated via
+  the authentication service and authorized via RBAC.
+
+owns:
+  etcd_keys:
+    - /globular/services/blog/config
+    - /globular/services/blog/instances/{node}
+  systemd_units:
+    - globular-blog.service
+  filesystem_paths: []
+  event_types:
+    - blog.post.created
+    - blog.post.updated
+    - blog.post.deleted
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/blog/config
+
+writes:
+  etcd_keys:
+    - /globular/services/blog/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config from etcd; publishes instance record.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists blog posts and comments in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all write requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for post creation, editing, and deletion.
+
+emits:
+  - blog.post.created
+  - blog.post.updated
+  - blog.post.deleted
+
+subscribes: []
+
+invariants:
+  - blog.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_blog_writes
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, blog reads and writes fail.
+    diagnosis: "Check scylla-server.service status; inspect blog service logs."
+    remedy: "Restore ScyllaDB quorum; blog reconnects automatically."
+
+safe_degraded_modes:
+  - "Read-only blog content may be served from cache if available."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestBlogAuthzAnnotations
+  - TestScyllaDBRequiredForBlog
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/blog/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

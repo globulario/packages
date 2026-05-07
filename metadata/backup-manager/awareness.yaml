@@ -1,0 +1,102 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: backup-manager
+package: backup-manager
+package_kind: service
+summary: >
+  Backup and recovery manager. Schedules and executes backups of cluster data
+  (ScyllaDB snapshots, MinIO buckets, etcd snapshots) using restic and rclone.
+  Writes backup metadata and schedules to etcd. Provides recovery posture
+  assessment and restore plan generation.
+
+owns:
+  etcd_keys:
+    - /globular/backup/jobs/{job_id}
+    - /globular/backup/schedules/{name}
+    - /globular/services/backup-manager/config
+    - /globular/services/backup-manager/instances/{node}
+  systemd_units:
+    - globular-backup-manager.service
+  filesystem_paths:
+    - /var/lib/globular/backups/
+  event_types:
+    - backup.job.started
+    - backup.job.completed
+    - backup.job.failed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+    - /globular/nodes/{node_id}/status
+
+writes:
+  etcd_keys:
+    - /globular/backup/jobs/{job_id}
+    - /globular/backup/schedules/{name}
+    - /globular/services/backup-manager/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads cluster config and writes backup job records to etcd.
+
+  - service: minio
+    phase: day1
+    required: true
+    reason: Backup artifacts are stored in and read from MinIO object storage.
+
+  - service: rclone
+    phase: day1
+    required: true
+    reason: Uses rclone for off-site backup transfer and sync operations.
+
+  - service: restic
+    phase: day1
+    required: true
+    reason: Uses restic for incremental snapshot creation and deduplication.
+
+emits:
+  - backup.job.started
+  - backup.job.completed
+  - backup.job.failed
+
+subscribes: []
+
+invariants:
+  - backup.minio_not_sole_truth
+  - backup.jobs_idempotent
+
+forbidden_fixes:
+  - auto_rollback_on_crash
+  - treat_minio_as_backup_authority
+
+known_failure_modes:
+  - id: minio_unreachable
+    description: >
+      If MinIO is unreachable, backup jobs fail. Existing backups in off-site storage
+      remain intact.
+    diagnosis: "Check minio service health on port 9000; inspect backup-manager logs."
+    remedy: "Restore MinIO quorum; retry failed backup job via workflow."
+
+safe_degraded_modes:
+  - "If backup-manager is down, the cluster continues operating; only new backup scheduling is impacted."
+
+remediation_workflows:
+  - backup-retry-job
+
+required_tests:
+  - TestBackupJobIdempotent
+  - TestMinioRequiredForBackup
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/backup/
+  - minio:read:backups
+  - minio:write:backups
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

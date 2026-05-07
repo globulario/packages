@@ -1,0 +1,108 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: repository
+package: repository
+package_kind: service
+summary: >
+  Package artifact registry. Uses ScyllaDB as the authoritative index and MinIO
+  as blob storage cache. ScyllaDB is the source of truth — local POSIX CAS is
+  also authoritative for installable artifacts. MinIO is NOT the source of truth.
+  Provides artifact upload, download, publish, verify, and version management RPCs.
+  Assigns versions via --bump; versions are never hardcoded in source.
+
+owns:
+  etcd_keys:
+    - /globular/services/repository/config
+    - /globular/services/repository/instances/{node}
+  systemd_units:
+    - globular-repository.service
+  filesystem_paths:
+    - /var/lib/globular/repository/
+  event_types:
+    - repository.artifact.published
+    - repository.artifact.verified
+    - repository.artifact.corrupted
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/repository/config
+
+writes:
+  etcd_keys:
+    - /globular/services/repository/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: ScyllaDB is the authoritative artifact index; all ListArtifacts and GetArtifactVersions use ScyllaDB.
+
+  - service: minio
+    phase: day0
+    required: true
+    reason: Artifact blobs are stored in MinIO; publish requires MinIO success before PUBLISHED state.
+
+emits:
+  - repository.artifact.published
+  - repository.artifact.verified
+  - repository.artifact.corrupted
+
+subscribes: []
+
+invariants:
+  - repository.scylladb_is_authoritative_index
+  - repository.minio_is_cache_not_truth
+  - repository.promote_requires_scylladb_success
+  - repository.no_hardcoded_versions_in_source
+  - repository.publish_state_column_wins_over_manifest_json
+
+forbidden_fixes:
+  - treat_minio_as_sole_artifact_authority
+  - auto_rollback_on_crash
+  - hardcode_versions_in_source
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, artifact discovery and publish operations fail.
+      completePublish fails silently if Scylla is down — artifacts stay in VERIFIED
+      state and the reconciler cannot find them, so services never upgrade.
+    diagnosis: "Check scylla-server.service status; verify repository logs for Scylla connection errors."
+    remedy: "Restore ScyllaDB quorum; repository reconnects and resumes publish operations."
+
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, blob upload and download fail. ScyllaDB index reads
+      continue; only artifact data transfer is blocked.
+    diagnosis: "Check minio service health on port 9000."
+    remedy: "Restore MinIO quorum."
+
+safe_degraded_modes:
+  - "If repository is down, node-agent pauses installs; running services continue."
+
+remediation_workflows:
+  - scylladb-repair
+  - minio-topology-repair
+
+required_tests:
+  - TestScyllaDBIsAuthoritativeIndex
+  - TestMinioIsCacheNotTruth
+  - TestPublishRequiresScyllaSuccess
+  - TestNoHardcodedVersionsInSource
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/repository/instances/
+  - minio:read:packages
+  - minio:write:packages
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

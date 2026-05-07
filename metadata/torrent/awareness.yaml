@@ -1,0 +1,91 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: torrent
+package: torrent
+package_kind: service
+summary: >
+  Torrent download service providing BitTorrent protocol support for large file
+  distribution. Downloads to MinIO object storage. All access is authenticated
+  and RBAC-authorized. MinIO is used as the download destination — ScyllaDB
+  tracks torrent metadata.
+
+owns:
+  etcd_keys:
+    - /globular/services/torrent/config
+    - /globular/services/torrent/instances/{node}
+  systemd_units:
+    - globular-torrent.service
+  filesystem_paths: []
+  event_types:
+    - torrent.download.started
+    - torrent.download.completed
+    - torrent.download.failed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/torrent/config
+
+writes:
+  etcd_keys:
+    - /globular/services/torrent/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all torrent management requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for torrent add, remove, and status operations.
+
+  - service: minio
+    phase: day1
+    required: true
+    reason: Stores downloaded torrent data in MinIO object storage.
+
+emits:
+  - torrent.download.started
+  - torrent.download.completed
+  - torrent.download.failed
+
+subscribes: []
+
+invariants:
+  - torrent.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_torrent_operations
+  - treat_minio_as_sole_authority
+
+known_failure_modes:
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, completed torrent downloads cannot be stored.
+    diagnosis: "Check minio service health on port 9000."
+    remedy: "Restore MinIO quorum."
+
+safe_degraded_modes:
+  - "If torrent service is down, the cluster continues operating; downloads are suspended."
+
+remediation_workflows: []
+
+required_tests:
+  - TestTorrentAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/torrent/instances/
+  - minio:write:torrents
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

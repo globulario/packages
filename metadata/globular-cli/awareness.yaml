@@ -1,0 +1,71 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: globular-cli
+package: globular-cli
+package_kind: command
+summary: >
+  Globular operator CLI. Provides typed commands for cluster management: deploy,
+  upgrade, rollback (explicit Force=true only), node join/leave, profile management,
+  and diagnostic commands. Never accepts IP:port — uses FQDNs (globular.internal
+  or hostname.globular.internal). Resolves all endpoints from etcd via mesh routing.
+  Has no systemd unit and manages no cluster state directly.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/globular
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Resolves cluster endpoints from etcd; cannot issue any cluster commands without etcd access.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - cli.no_ip_port_arguments
+  - cli.no_hardcoded_versions
+  - cli.all_endpoints_via_fqdn
+
+forbidden_fixes:
+  - accept_ip_port_in_cli
+  - hardcode_versions_in_source
+  - execute_outside_node_agent_supervisor
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/globular; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If globular-cli is absent, the cluster continues operating; operator tooling is impacted."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+  - TestNoIpPortInCli
+  - TestNoHardcodedVersionsInSource
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

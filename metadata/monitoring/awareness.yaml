@@ -1,0 +1,92 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: monitoring
+package: monitoring
+package_kind: service
+summary: >
+  Monitoring service providing metrics dashboards, alert rule management, and
+  cluster observability. Aggregates data from Prometheus and ScyllaDB. Exposes
+  metrics query RPCs authenticated and RBAC-authorized for operator dashboards.
+
+owns:
+  etcd_keys:
+    - /globular/services/monitoring/config
+    - /globular/services/monitoring/instances/{node}
+  systemd_units:
+    - globular-monitoring.service
+  filesystem_paths: []
+  event_types:
+    - monitoring.alert.fired
+    - monitoring.alert.resolved
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/monitoring/config
+
+writes:
+  etcd_keys:
+    - /globular/services/monitoring/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Reads historical metrics and alert history from ScyllaDB.
+
+  - service: prometheus
+    phase: day1
+    required: true
+    reason: Queries current metrics from Prometheus for dashboards and alerting.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all monitoring API requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for metrics queries and alert management.
+
+emits:
+  - monitoring.alert.fired
+  - monitoring.alert.resolved
+
+subscribes: []
+
+invariants:
+  - monitoring.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_monitoring_queries
+
+known_failure_modes:
+  - id: prometheus_unavailable
+    description: >
+      If Prometheus is unreachable, real-time metrics queries fail. Historical
+      data from ScyllaDB remains accessible.
+    diagnosis: "Check globular-prometheus.service status; inspect monitoring logs."
+    remedy: "Restore Prometheus; monitoring reconnects automatically."
+
+safe_degraded_modes:
+  - "If monitoring service is down, the cluster continues operating; dashboards are unavailable."
+
+remediation_workflows: []
+
+required_tests:
+  - TestMonitoringAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/monitoring/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

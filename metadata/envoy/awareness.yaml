@@ -1,0 +1,90 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: envoy
+package: envoy
+package_kind: infrastructure
+summary: >
+  L7 edge proxy providing TLS termination, gRPC-Web translation, and routing for
+  all cluster ingress traffic. Health port: 8443. Envoy reads dynamic routing
+  config from xds via the xDS protocol. Restart sequence is critical: ALWAYS
+  restart xds first, then Envoy — never stop both simultaneously. Envoy is an
+  infrastructure package; binary replacement requires a service restart to avoid
+  running a deleted binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-envoy.service
+  filesystem_paths:
+    - /var/lib/globular/config/tls/
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/envoy/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: xds
+    phase: day0
+    required: true
+    reason: Envoy reads its routing configuration dynamically from xds via xDS protocol; without xds it has no routes.
+
+  - service: gateway
+    phase: day1
+    required: false
+    reason: Gateway registers application routes into xds; without it Envoy has only static admin routes.
+    safe_escape_hatch: Envoy continues serving already-loaded routes from xds cache.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+  - envoy.restart_after_xds_not_before
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+  - stop_envoy_and_xds_simultaneously
+  - restart_envoy_before_xds
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-envoy.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-envoy.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: xds_not_ready_before_envoy
+    description: >
+      If Envoy starts before xds is ready, it cannot load routing config and serves
+      503 for all routes until xds becomes available and pushes config.
+    diagnosis: "Check globular-xds.service status; inspect Envoy admin logs for xDS connection errors."
+    remedy: "Restart xds first, then restart Envoy after xds reports healthy."
+
+safe_degraded_modes:
+  - "Envoy continues serving cached routes if xds loses connectivity briefly."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestEnvoyRestartAfterInstall
+  - TestXdsBeforeEnvoyRestart
+  - TestHashDriftDetection
+
+required_permissions:
+  - etcd:read:/globular/services/envoy/config
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

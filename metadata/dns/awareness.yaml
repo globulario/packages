@@ -1,0 +1,91 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: dns
+package: dns
+package_kind: service
+summary: >
+  Authoritative DNS service running on port 10006. Manages internal DNS zones
+  for the globular.internal domain and external domain delegation. DNS zones are
+  in-memory — they MUST be re-registered after restart (known limitation). Split-
+  horizon DNS is not supported. All zone data must also persist in ScyllaDB to
+  survive restarts.
+
+owns:
+  etcd_keys:
+    - /globular/services/dns/config
+    - /globular/services/dns/instances/{node}
+  systemd_units:
+    - globular-dns.service
+  filesystem_paths: []
+  event_types:
+    - dns.zone.registered
+    - dns.record.updated
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/dns/config
+
+writes:
+  etcd_keys:
+    - /globular/services/dns/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config from etcd; publishes instance record.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists zone records in ScyllaDB to survive service restarts.
+
+emits:
+  - dns.zone.registered
+  - dns.record.updated
+
+subscribes: []
+
+invariants:
+  - dns.zones_must_persist_in_scylladb
+  - dns.zones_must_reregister_after_restart
+  - dns.no_split_horizon
+
+forbidden_fixes:
+  - assume_zones_survive_restart_without_scylladb
+
+known_failure_modes:
+  - id: zones_lost_after_restart
+    description: >
+      DNS zones are in-memory. If dns service restarts and ScyllaDB is unavailable
+      or zone re-registration is skipped, zone data is lost.
+    diagnosis: "Query dns service for zone list; compare against ScyllaDB record count."
+    remedy: "Re-register zones via grpcurl to localhost:10006; ensure ScyllaDB is reachable on startup."
+
+  - id: flickering_dns_records
+    description: >
+      If the DNS reconciler runs on non-leader nodes simultaneously, multiple
+      controllers apply conflicting DNS records causing record flickering.
+    diagnosis: "Check controller logs for DNS reconciler gating; verify only leader node applies DNS."
+    remedy: "Ensure DNS reconciler is gated behind leader check in cluster-controller."
+
+safe_degraded_modes:
+  - "If dns is down, nodes fall back to /etc/hosts for known addresses."
+
+remediation_workflows:
+  - dns-zone-reseed
+
+required_tests:
+  - TestZonesMustPersistInScyllaDB
+  - TestZonesReregisteredAfterRestart
+  - TestLeaderOnlyDnsReconciler
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/dns/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

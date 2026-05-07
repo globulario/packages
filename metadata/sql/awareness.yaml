@@ -1,0 +1,85 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: sql
+package: sql
+package_kind: service
+summary: >
+  SQL query service providing relational data access backed by ScyllaDB. Translates
+  SQL-like queries into ScyllaDB CQL operations. All access is authenticated and
+  RBAC-authorized. Not a replacement for a full relational DB — operates within
+  ScyllaDB's consistency model.
+
+owns:
+  etcd_keys:
+    - /globular/services/sql/config
+    - /globular/services/sql/instances/{node}
+  systemd_units:
+    - globular-sql.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/sql/config
+
+writes:
+  etcd_keys:
+    - /globular/services/sql/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: All SQL queries are executed against ScyllaDB; service cannot function without it.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all query requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for table reads and writes.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - sql.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_sql_queries
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, all SQL queries fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If sql service is down, the cluster continues operating; SQL query clients receive errors."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestSqlAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/sql/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

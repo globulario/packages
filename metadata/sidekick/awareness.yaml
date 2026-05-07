@@ -1,0 +1,78 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: sidekick
+package: sidekick
+package_kind: infrastructure
+summary: >
+  Sidekick is a MinIO load balancer and metrics proxy for Prometheus. It IS a
+  systemd service (globular-sidekick.service) and depends on MinIO being healthy.
+  Provides HTTP load balancing across MinIO nodes and exposes MinIO metrics for
+  Prometheus scraping. Binary replacement requires a service restart to avoid
+  running a deleted binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-sidekick.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/sidekick/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: minio
+    phase: day0
+    required: true
+    reason: Sidekick proxies and load-balances MinIO; without MinIO it has no backend to serve.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+  - sidekick.requires_minio_healthy
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-sidekick.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-sidekick.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, sidekick has no backends and returns 503 for all requests.
+    diagnosis: "Check minio service health on port 9000; inspect sidekick logs."
+    remedy: "Restore MinIO quorum; sidekick resumes routing automatically."
+
+safe_degraded_modes:
+  - "If sidekick is down, Prometheus loses MinIO metrics; direct MinIO access continues on port 9000."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestSidekickRestartAfterInstall
+  - TestSidekickRequiresMinioHealthy
+
+required_permissions:
+  - etcd:read:/globular/services/sidekick/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

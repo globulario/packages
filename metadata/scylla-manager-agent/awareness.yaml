@@ -1,0 +1,69 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: scylla-manager-agent
+package: scylla-manager-agent
+package_kind: infrastructure
+summary: >
+  Scylla Manager Agent runs on each ScyllaDB node and exposes local ScyllaDB
+  operations (backup, restore, repair) to the central scylla-manager. Acts as
+  the local executor for scylla-manager commands. Binary replacement requires
+  a service restart to avoid running a deleted binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-scylla-manager-agent.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/scylla-manager-agent/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: The agent manages local ScyllaDB operations; without ScyllaDB running it has nothing to manage.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-scylla-manager-agent.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-scylla-manager-agent.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "If scylla-manager-agent is down, scylla-manager cannot reach this node for backup/repair; ScyllaDB continues."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestScyllaManagerAgentRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/scylla-manager-agent/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

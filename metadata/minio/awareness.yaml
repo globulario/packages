@@ -1,0 +1,94 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: minio
+package: minio
+package_kind: infrastructure
+summary: >
+  MinIO object storage — Layer 1. Provides S3-compatible blob storage for package
+  artifacts, file uploads, media assets, and backups. Minimum 3 nodes for erasure
+  coding and redundancy. MinIO is a CACHE for packages — ScyllaDB and local POSIX
+  CAS are the authoritative stores. NOT dependent on ScyllaDB. Health port: 9000.
+  Binary replacement requires a service restart to avoid running a deleted binary
+  inode (hash_drift). Quorum requirement: minimum 3 nodes.
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-minio.service
+  filesystem_paths:
+    - /var/lib/globular/minio/
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/minio/config
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - minio.minimum_3_nodes_for_erasure_coding
+  - minio.not_sole_artifact_authority
+  - minio.independent_of_scylladb
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - treat_minio_as_package_authority
+  - use_minio_as_sole_truth
+  - create_minio_scylladb_dependency
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-minio.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-minio.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: quorum_loss
+    description: >
+      If fewer than 3 MinIO nodes are available, erasure coding loses redundancy.
+      With only 1 node, MinIO operates in single-node mode — a single point of
+      failure. This cascades: workflows fail → completePublish fails → artifacts
+      stay VERIFIED → reconciler cannot find them → services never upgrade.
+    diagnosis: "mc admin info <alias>; check MinIO health port 9000 on all nodes."
+    remedy: "Restore failed MinIO nodes; MinIO rejoins the distributed pool automatically."
+
+  - id: topology_retry_fragility
+    description: >
+      The MinIO topology workflow has no auto-retry on transient failure; operator
+      must re-trigger manually.
+    diagnosis: "Check workflow service for failed MinIO topology workflow; inspect MinIO health."
+    remedy: "Re-trigger the MinIO topology workflow after resolving the transient failure."
+
+safe_degraded_modes:
+  - "With 2 nodes, MinIO degrades to reduced redundancy but continues serving requests."
+  - "ScyllaDB and etcd continue independently of MinIO."
+
+remediation_workflows:
+  - minio-topology-repair
+  - infrastructure-service-restart
+
+required_tests:
+  - TestMinioRestartAfterInstall
+  - TestMinioNotSoleTruth
+  - TestMinioIndependentOfScyllaDB
+
+required_permissions:
+  - etcd:read:/globular/services/minio/config
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

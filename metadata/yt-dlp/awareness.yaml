@@ -1,0 +1,67 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: yt-dlp
+package: yt-dlp
+package_kind: command
+summary: >
+  yt-dlp binary for downloading media from external sources (YouTube, etc.).
+  Used by the media service for external media ingestion. Standalone CLI with
+  no systemd unit. Executes only within the node-agent supervisor boundary.
+  Has no etcd ownership and manages no cluster state.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/yt-dlp
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/yt-dlp; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+  - id: external_source_unavailable
+    description: >
+      If the target external media source is unreachable or has changed its
+      anti-scraping measures, yt-dlp downloads fail.
+    diagnosis: "Check yt-dlp output for HTTP error codes or extraction failures."
+    remedy: "Update yt-dlp to the latest version via package install."
+
+safe_degraded_modes:
+  - "If yt-dlp is absent, external media download in the media service is disabled; other media operations continue."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

@@ -1,0 +1,74 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: scylla-manager
+package: scylla-manager
+package_kind: infrastructure
+summary: >
+  Scylla Manager provides automated backup scheduling, repair scheduling, and
+  cluster health monitoring for ScyllaDB. Coordinates with scylla-manager-agent
+  running on each ScyllaDB node. Binary replacement requires a service restart
+  to avoid running a deleted binary inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-scylla-manager.service
+  filesystem_paths:
+    - /var/lib/globular/scylla-manager/
+  event_types:
+    - scylla-manager.repair.completed
+    - scylla-manager.backup.completed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/scylla-manager/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Scylla Manager manages ScyllaDB clusters; it has no purpose without ScyllaDB nodes.
+
+emits:
+  - scylla-manager.repair.completed
+  - scylla-manager.backup.completed
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-scylla-manager.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-scylla-manager.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "If scylla-manager is down, automated repair and backup scheduling stops; ScyllaDB continues operating."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestScyllaManagerRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/scylla-manager/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

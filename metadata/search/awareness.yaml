@@ -1,0 +1,86 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: search
+package: search
+package_kind: service
+summary: >
+  Full-text search service backed by ScyllaDB. Provides indexing and query RPCs
+  for searchable content across the cluster. All access is authenticated and
+  RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/search/config
+    - /globular/services/search/instances/{node}
+  systemd_units:
+    - globular-search.service
+  filesystem_paths: []
+  event_types:
+    - search.index.updated
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/search/config
+
+writes:
+  etcd_keys:
+    - /globular/services/search/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists search indexes in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all search requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for search queries and index writes.
+
+emits:
+  - search.index.updated
+
+subscribes: []
+
+invariants:
+  - search.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_search
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, search index reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If search service is down, the cluster continues operating; search queries return errors."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestSearchAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/search/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

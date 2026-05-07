@@ -1,0 +1,60 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: sha256sum
+package: sha256sum
+package_kind: command
+summary: >
+  sha256sum binary for checksum computation and verification. Used by node-agent
+  and other services for artifact integrity validation. Standard system utility
+  packaged for deterministic installation. Has no systemd unit and manages no
+  cluster state.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/bin/sha256sum
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "Manually verify binary against known-good hash."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If sha256sum is absent, integrity checks fallback to OS-provided binary if available."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

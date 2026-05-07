@@ -1,0 +1,88 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: conversation
+package: conversation
+package_kind: service
+summary: >
+  Conversation management service. Provides persistent threaded conversations
+  backed by ScyllaDB. Supports real-time messaging via event subscriptions.
+  All access is authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/conversation/config
+    - /globular/services/conversation/instances/{node}
+  systemd_units:
+    - globular-conversation.service
+  filesystem_paths: []
+  event_types:
+    - conversation.message.sent
+    - conversation.thread.created
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/conversation/config
+
+writes:
+  etcd_keys:
+    - /globular/services/conversation/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists conversation threads and messages in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all conversation participants.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces who can create, read, and post to conversations.
+
+emits:
+  - conversation.message.sent
+  - conversation.thread.created
+
+subscribes: []
+
+invariants:
+  - conversation.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_conversation_writes
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, conversation reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If conversation is down, the cluster continues operating; messaging is suspended."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestConversationAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/conversation/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

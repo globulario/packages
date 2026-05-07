@@ -1,0 +1,70 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: alertmanager
+package: alertmanager
+package_kind: infrastructure
+summary: >
+  Prometheus Alertmanager receives firing alerts from Prometheus, deduplicates,
+  groups, and routes them to notification receivers (email, webhook, etc.).
+  It is an infrastructure package — binary replacement requires a service restart
+  to avoid running a deleted binary inode.
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-alertmanager.service
+  filesystem_paths:
+    - /var/lib/globular/alertmanager/
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/alertmanager/config
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: prometheus
+    phase: day1
+    required: true
+    reason: Receives alerts from Prometheus; without it there is nothing to route.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-alertmanager.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-alertmanager.service; node-agent runtime check clears hash_drift within 30s"
+
+safe_degraded_modes:
+  - "If alertmanager is down, Prometheus continues collecting metrics; alerts are queued."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestAlertmanagerRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/alertmanager/config
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

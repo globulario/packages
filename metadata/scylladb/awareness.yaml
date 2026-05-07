@@ -1,0 +1,109 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: scylladb
+package: scylladb
+package_kind: infrastructure
+summary: >
+  ScyllaDB distributed NoSQL database — Layer 0 persistent data store. Minimum 3
+  nodes for replication (quorum requirement). Managed as a .deb package using the
+  upstream scylla-server.service systemd unit — Globular does NOT wrap it with its
+  own unit. NOT dependent on MinIO — they are independent Layer 0 primitives.
+  Raft joins are SEQUENTIAL — second node stalls if first has not completed.
+  UIDs must NEVER be hardcoded — always use user.Lookup(). Binary replacement
+  requires a service restart.
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - scylla-server.service
+  filesystem_paths:
+    - /var/lib/scylla/
+  event_types:
+    - scylladb.node.joined
+    - scylladb.node.left
+    - scylladb.raft.stall
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits:
+  - scylladb.node.joined
+  - scylladb.node.left
+  - scylladb.raft.stall
+
+subscribes: []
+
+invariants:
+  - scylladb.minimum_3_nodes_for_replication
+  - scylladb.independent_of_minio
+  - scylladb.raft_joins_are_sequential
+  - scylladb.uid_never_hardcoded
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+
+forbidden_fixes:
+  - create_scylladb_minio_dependency
+  - parallel_scylladb_raft_join
+  - hardcode_uid_110_as_scylla
+  - remove_scylladb_from_founding_quorum_node
+  - auto_rollback_on_crash
+  - replace_binary_without_restart
+
+known_failure_modes:
+  - id: raft_stall
+    description: >
+      During cluster join, the second node stalls waiting for the first node's
+      ScyllaDB to complete its Raft join. If the join script parallelizes, both
+      stall indefinitely.
+    diagnosis: "Check scylla-server.service logs for Raft timeout messages; verify first node is serving on port 9042."
+    remedy: "Escalate: restart stalled node's scylla-server; if stuck, wipe data dir and rejoin. Join script must sequence node joins."
+
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show scylla-server.service --property=MainPID"
+    remedy: "sudo systemctl restart scylla-server.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: quorum_loss
+    description: >
+      If fewer than 2 of 3 ScyllaDB nodes are reachable, write quorum is lost.
+      Reads may still succeed with ONE replica.
+    diagnosis: "nodetool status; check replication factor and consistency level."
+    remedy: "Restore failed ScyllaDB nodes; run nodetool repair after recovery."
+
+  - id: late_connect
+    description: >
+      Services connecting to ScyllaDB during initial cluster bootstrap may fail
+      if ScyllaDB is not yet ready to serve CQL queries.
+    diagnosis: "Check scylla-server.service startup logs for 'listening on CQL port'; verify port 9042 is open."
+    remedy: "Wait for ScyllaDB to finish initialization; services retry on reconnect."
+
+safe_degraded_modes:
+  - "With 2 nodes, reads succeed at ONE consistency; writes require quorum and fail."
+  - "etcd and MinIO continue independently of ScyllaDB."
+
+remediation_workflows:
+  - scylladb-repair
+  - scylladb-node-rejoin
+
+required_tests:
+  - TestScyllaDBMinimum3Nodes
+  - TestScyllaDBIndependentOfMinIO
+  - TestRaftJoinsSequential
+  - TestUidNeverHardcoded
+
+required_permissions:
+  - etcd:read:/globular/system/config
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,79 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: echo
+package: echo
+package_kind: service
+summary: >
+  Echo service — a minimal reference/test service that reflects requests back
+  to callers. Used for connectivity testing, mTLS verification, and integration
+  tests. All access is authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/echo/config
+    - /globular/services/echo/instances/{node}
+  systemd_units:
+    - globular-echo.service
+  filesystem_paths: []
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/echo/config
+
+writes:
+  etcd_keys:
+    - /globular/services/echo/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all echo requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for echo RPCs.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - echo.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_echo
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: auth_unavailable
+    description: >
+      If authentication service is down, echo RPCs reject all requests.
+    diagnosis: "Check authentication service health; inspect echo logs."
+    remedy: "Restore authentication service."
+
+safe_degraded_modes:
+  - "If echo is down, the cluster continues operating; only connectivity tests are impacted."
+
+remediation_workflows: []
+
+required_tests:
+  - TestEchoAuthzAnnotations
+  - TestMtlsConnectivity
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/echo/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

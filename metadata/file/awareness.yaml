@@ -1,0 +1,106 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: file
+package: file
+package_kind: service
+summary: >
+  File management service providing upload, download, listing, and metadata
+  operations. Stores file blobs in MinIO and file metadata in ScyllaDB. All
+  access is authenticated and RBAC-authorized. MinIO is a cache — ScyllaDB and
+  local POSIX CAS are the authoritative stores.
+
+owns:
+  etcd_keys:
+    - /globular/services/file/config
+    - /globular/services/file/instances/{node}
+  systemd_units:
+    - globular-file.service
+  filesystem_paths: []
+  event_types:
+    - file.uploaded
+    - file.deleted
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/file/config
+
+writes:
+  etcd_keys:
+    - /globular/services/file/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists file metadata in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all file operations.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for file upload, download, and deletion.
+
+  - service: minio
+    phase: day1
+    required: true
+    reason: Stores file blobs in MinIO object storage.
+
+emits:
+  - file.uploaded
+  - file.deleted
+
+subscribes: []
+
+invariants:
+  - file.all_rpcs_have_authz_annotation
+  - file.minio_not_sole_truth
+
+forbidden_fixes:
+  - bypass_rbac_for_file_writes
+  - treat_minio_as_sole_authority
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, file uploads and downloads fail. Metadata reads
+      from ScyllaDB continue.
+    diagnosis: "Check minio service health on port 9000; inspect file service logs."
+    remedy: "Restore MinIO quorum; file service reconnects automatically."
+
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, file metadata reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If file service is down, the cluster continues operating; file operations are suspended."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestFileAuthzAnnotations
+  - TestMinioNotSoleTruth
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/file/instances/
+  - minio:read:files
+  - minio:write:files
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,83 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: ai-router
+package: ai-router
+package_kind: service
+summary: >
+  Dynamic routing service for AI backends. Resolves which AI backend (Claude,
+  local model, etc.) should handle a given request based on request type, cost
+  constraints, and availability. Supplements — never replaces — the cluster's
+  deterministic convergence model.
+
+owns:
+  etcd_keys:
+    - /globular/services/ai-router/config
+    - /globular/services/ai-router/instances/{node}
+  systemd_units:
+    - globular-ai-router.service
+  filesystem_paths: []
+  event_types:
+    - ai.router.route.selected
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+
+writes:
+  etcd_keys:
+    - /globular/services/ai-router/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: ai-memory
+    phase: day1
+    required: false
+    reason: Reads routing history and preferences from ai-memory to inform routing decisions.
+    safe_escape_hatch: Falls back to static routing rules when ai-memory is unavailable.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Must authenticate callers before routing their requests.
+
+emits:
+  - ai.router.route.selected
+
+subscribes: []
+
+invariants:
+  - ai.router.cluster_operates_without_router
+
+forbidden_fixes:
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: all_backends_unavailable
+    description: >
+      If all configured AI backends are unreachable, ai-router returns an error.
+      The cluster itself continues operating.
+    diagnosis: "Check ai-router logs for backend connection errors."
+    remedy: "Restore at least one AI backend; ai-router retries on the next request."
+
+safe_degraded_modes:
+  - "If ai-router is down, the cluster continues operating through its deterministic convergence model."
+
+remediation_workflows: []
+
+required_tests:
+  - TestRoutingFallbackWhenAiMemoryUnavailable
+  - TestAuthenticationRequired
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/ai-router/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

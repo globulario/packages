@@ -1,0 +1,92 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: node-agent
+package: node-agent
+package_kind: service
+summary: >
+  Node-local executor that installs, upgrades, monitors, and reports service packages.
+  It is the ground truth for Layer 3 (Installed) in the 4-layer state model.
+
+owns:
+  etcd_keys:
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/nodes/{node_id}/status
+  systemd_units:
+    - globular-node-agent.service
+  filesystem_paths:
+    - /var/lib/globular/packages/
+    - /var/lib/globular/pki/
+  event_types:
+    - node.package.installed
+    - node.package.failed
+    - node.heartbeat
+
+reads:
+  etcd_keys:
+    - /globular/resources/DesiredService/{name}
+    - /globular/resources/ServiceRelease/{name}
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+
+writes:
+  etcd_keys:
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/nodes/{node_id}/status
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Node agent writes heartbeat and package state to etcd on every cycle.
+
+  - service: cluster-controller
+    phase: day1
+    required: false
+    reason: Reads desired state from etcd written by controller; controller not directly contacted.
+    safe_escape_hatch: Operates from cached etcd state if controller is temporarily unavailable.
+
+  - service: repository
+    phase: package_install
+    required: true
+    reason: Downloads package artifacts during install and upgrade.
+    safe_escape_hatch: Install paused; existing running services continue unaffected.
+
+emits:
+  - node.package.installed
+  - node.package.failed
+  - node.heartbeat
+
+subscribes: []
+
+invariants:
+  - install.result.atomic_commit
+  - runtime.installed_state_not_liveness
+
+forbidden_fixes:
+  - bypass_version_gate
+  - auto_rollback_on_crash
+  - skip_heartbeat_phase2
+
+safe_degraded_modes:
+  - "If repository is unreachable, skip installs and report degraded; heartbeat continues."
+  - "If controller is unreachable, operate from last known desired state in etcd."
+
+remediation_workflows:
+  - node-package-repair
+  - node-reseed
+
+required_tests:
+  - TestHeartbeatPhase1And2Only
+  - TestInstallAtomicCommit
+  - TestDowngradeGuardUnconditional
+  - TestNoRollbackOnCrash
+
+required_permissions:
+  - etcd:read:/globular/resources/
+  - etcd:write:/globular/nodes/{node_id}/
+  - minio:read:packages
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: true

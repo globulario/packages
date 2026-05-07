@@ -1,0 +1,66 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: etcdctl
+package: etcdctl
+package_kind: command
+summary: >
+  etcdctl CLI binary for direct etcd operations. A standalone command invoked by
+  operators or scripts for etcd inspection and management. Acceptable to point at
+  localhost for the local etcd member. Has no systemd unit, owns no etcd keys of
+  its own, and manages no cluster service state. Must be executed only within the
+  node-agent supervisor boundary.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/etcdctl
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: etcdctl communicates directly with the etcd endpoint; without etcd it has no target.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.localhost_acceptable_for_local_etcd_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+  - use_etcdctl_for_remote_cluster_writes_without_ca
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted.
+    diagnosis: "sha256sum /usr/local/bin/etcdctl; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "etcdctl absence does not affect cluster operation; it is an operator tool only."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

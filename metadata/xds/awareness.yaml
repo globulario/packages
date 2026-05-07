@@ -1,0 +1,94 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: xds
+package: xds
+package_kind: infrastructure
+summary: >
+  xDS service-mesh control plane. Envoy reads its dynamic routing, cluster, and
+  listener configuration from xds using the xDS protocol. MUST be restarted before
+  Envoy when both need restart — never stop both simultaneously. Gateway registers
+  application routes into xds on startup, which xds then pushes to Envoy. Binary
+  replacement requires a service restart to avoid running a deleted binary inode.
+
+owns:
+  etcd_keys:
+    - /globular/services/xds/config
+    - /globular/services/xds/instances/{node}
+  systemd_units:
+    - globular-xds.service
+  filesystem_paths:
+    - /var/lib/globular/config/tls/
+  event_types:
+    - xds.route.updated
+    - xds.cluster.updated
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+    - /globular/services/{service_id}/instances/{node}
+
+writes:
+  etcd_keys:
+    - /globular/services/xds/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service endpoint configuration from etcd to build routing tables for Envoy.
+
+emits:
+  - xds.route.updated
+  - xds.cluster.updated
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+  - xds.must_restart_before_envoy
+  - xds.never_stop_with_envoy_simultaneously
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+  - restart_envoy_before_xds
+  - stop_xds_and_envoy_simultaneously
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-xds.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-xds.service; then restart globular-envoy.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: envoy_loses_routes_after_xds_restart
+    description: >
+      If xds is restarted while Envoy is running, Envoy loses its xDS connection
+      and serves stale cached routes until xds reconnects and pushes new config.
+    diagnosis: "Check Envoy admin interface for xDS connection status; inspect xds logs."
+    remedy: "Restart xds; Envoy reconnects automatically and receives updated routes."
+
+safe_degraded_modes:
+  - "Envoy continues serving cached routes during brief xds restarts."
+  - "If xds is down for an extended period, Envoy routes become stale and new services are not routable."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestXdsRestartBeforeEnvoy
+  - TestHashDriftDetection
+  - TestXdsRestartAfterInstall
+
+required_permissions:
+  - etcd:read:/globular/services/
+  - etcd:write:/globular/services/xds/instances/
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

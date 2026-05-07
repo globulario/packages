@@ -1,0 +1,91 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: resource
+package: resource
+package_kind: service
+summary: >
+  Resource management service providing account, group, and organization identity
+  context. Manages user accounts, groups, and organizational hierarchies backed by
+  ScyllaDB. Used by authentication and rbac for identity resolution. All access
+  is authenticated and RBAC-authorized.
+
+owns:
+  etcd_keys:
+    - /globular/services/resource/config
+    - /globular/services/resource/instances/{node}
+  systemd_units:
+    - globular-resource.service
+  filesystem_paths: []
+  event_types:
+    - resource.account.created
+    - resource.account.deleted
+    - resource.group.updated
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/resource/config
+
+writes:
+  etcd_keys:
+    - /globular/services/resource/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists account, group, and organization records in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all resource management requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for account and group operations.
+
+emits:
+  - resource.account.created
+  - resource.account.deleted
+  - resource.group.updated
+
+subscribes: []
+
+invariants:
+  - resource.all_rpcs_have_authz_annotation
+
+forbidden_fixes:
+  - bypass_rbac_for_resource_writes
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, identity context reads and writes fail.
+    diagnosis: "Check scylla-server.service status."
+    remedy: "Restore ScyllaDB quorum."
+
+safe_degraded_modes:
+  - "If resource service is down, new account creation is blocked; existing auth tokens remain valid."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestResourceAuthzAnnotations
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/resource/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,61 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: claude
+package: claude
+package_kind: command
+summary: >
+  Claude CLI binary. A standalone command-line tool invoked by operators or AI
+  services. Has no systemd unit, owns no etcd keys, and manages no cluster state.
+  Must be executed only within the node-agent supervisor boundary. Integrity is
+  enforced by checksum validation at install time.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/claude
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+  - store_tokens_in_source_code
+
+known_failure_modes:
+  - id: binary_checksum_mismatch
+    description: >
+      If the installed binary checksum does not match the repository manifest,
+      the command is considered corrupted and must be reinstalled.
+    diagnosis: "sha256sum /usr/local/bin/claude; compare against package manifest."
+    remedy: "Reinstall via node-agent package install workflow."
+
+safe_degraded_modes:
+  - "If claude binary is unavailable, the cluster continues operating; only AI operator tooling is impacted."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

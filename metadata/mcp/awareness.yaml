@@ -1,0 +1,87 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: mcp
+package: mcp
+package_kind: service
+summary: >
+  MCP (Model Context Protocol) server providing 129+ typed tools for AI operator
+  access to the cluster. Running on port 10260, traffic is routed through Envoy
+  on port 443. Exposes read-heavy diagnostic RPCs to AI assistants. All access
+  is authenticated and RBAC-authorized. The cluster must function without this
+  service — it is supplementary operator tooling.
+
+owns:
+  etcd_keys:
+    - /globular/services/mcp/config
+    - /globular/services/mcp/instances/{node}
+  systemd_units:
+    - globular-mcp.service
+  filesystem_paths:
+    - /var/lib/globular/mcp/config.json
+  event_types: []
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/nodes/{node_id}/status
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/resources/DesiredService/{name}
+    - /globular/services/{service_id}/config
+    - /globular/services/{service_id}/instances/{node}
+
+writes:
+  etcd_keys:
+    - /globular/services/mcp/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads cluster state to serve MCP tool responses.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all MCP tool callers.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces which tools are accessible to which AI agents.
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - mcp.all_tools_have_authz
+  - mcp.cluster_operates_without_mcp
+
+forbidden_fixes:
+  - bypass_rbac_for_mcp_tools
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: auth_unavailable
+    description: >
+      If authentication service is down, MCP rejects all tool calls.
+    diagnosis: "Check authentication service health; inspect mcp logs."
+    remedy: "Restore authentication service."
+
+safe_degraded_modes:
+  - "If mcp is down, the cluster continues operating; AI operator tooling is suspended."
+
+remediation_workflows: []
+
+required_tests:
+  - TestMcpAuthzAnnotations
+  - TestClusterOperatesWithoutMcp
+
+required_permissions:
+  - etcd:read:/globular/
+  - etcd:write:/globular/services/mcp/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

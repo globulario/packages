@@ -1,0 +1,80 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: cluster-doctor
+package: cluster-doctor
+package_kind: service
+summary: >
+  Health analysis service running on port 12005. Read-only by design — observes
+  all 4 truth layers (Repository, Desired, Installed, Runtime) and publishes
+  findings. Never mutates cluster state. Profiles: control-plane. Provides drift
+  reports, doctor reports, and convergence detail to operators and AI agents.
+
+owns:
+  etcd_keys:
+    - /globular/services/cluster-doctor/config
+    - /globular/services/cluster-doctor/instances/{node}
+  systemd_units:
+    - globular-cluster-doctor.service
+  filesystem_paths: []
+  event_types:
+    - doctor.finding.published
+    - doctor.invariant.violated
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/nodes/{node_id}/status
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/resources/DesiredService/{name}
+    - /globular/resources/ServiceRelease/{name}
+    - /globular/ingress/v1/spec
+    - /globular/ingress/v1/status/{node_id}
+
+writes:
+  etcd_keys:
+    - /globular/services/cluster-doctor/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads all cluster state from etcd to produce health findings.
+
+emits:
+  - doctor.finding.published
+  - doctor.invariant.violated
+
+subscribes: []
+
+invariants:
+  - doctor.read_only_never_mutates
+  - doctor.observes_all_4_layers
+
+forbidden_fixes:
+  - doctor_mutates_cluster_state
+  - doctor_skips_layers
+
+known_failure_modes:
+  - id: stale_findings
+    description: >
+      If etcd is slow or partitioned, doctor findings may reflect stale cluster
+      state and miss recent changes.
+    diagnosis: "Compare doctor report timestamp against etcd write timestamps."
+    remedy: "Wait for etcd to recover; re-request doctor report."
+
+safe_degraded_modes:
+  - "If cluster-doctor is down, the cluster continues operating; only health analysis is impacted."
+
+remediation_workflows: []
+
+required_tests:
+  - TestDoctorReadOnly
+  - TestDoctorObservesAll4Layers
+
+required_permissions:
+  - etcd:read:/globular/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

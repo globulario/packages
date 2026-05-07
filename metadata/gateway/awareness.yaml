@@ -1,0 +1,89 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: gateway
+package: gateway
+package_kind: infrastructure
+summary: >
+  HTTP/gRPC admin UI proxy and join script generator. Health port: 8080. Registers
+  service routes into xds on startup so Envoy can route to them. Also generates
+  dynamic join scripts for Day-1 node joining (curl the gateway, not tarball copy).
+  Binary replacement requires a service restart to avoid running a deleted binary
+  inode (hash_drift).
+
+owns:
+  etcd_keys: []
+  systemd_units:
+    - globular-gateway.service
+  filesystem_paths: []
+  event_types:
+    - gateway.route.registered
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+    - /globular/services/{service_id}/instances/{node}
+
+writes:
+  etcd_keys: []
+
+depends_on:
+  - service: xds
+    phase: day0
+    required: true
+    reason: Gateway registers service routes into xds; without xds routes cannot be published to Envoy.
+
+  - service: envoy
+    phase: day0
+    required: true
+    reason: Envoy serves the routes that gateway registers; without Envoy traffic cannot reach services.
+
+emits:
+  - gateway.route.registered
+
+subscribes: []
+
+invariants:
+  - runtime.binary_hash_must_match_installed
+  - install.requires_service_restart
+  - gateway.day1_join_via_curl_not_tarball
+
+forbidden_fixes:
+  - replace_binary_without_restart
+  - auto_rollback_on_crash
+  - copy_tarball_for_day1_join
+
+known_failure_modes:
+  - id: hash_drift_after_install
+    description: >
+      After binary replacement during install, the old process continues running
+      the deleted binary inode. node-agent runtime health reports hash_drift because
+      /proc/PID/exe points to the deleted binary, not the new one.
+    diagnosis: "ls -la /proc/<PID>/exe shows '(deleted)'; systemctl show globular-gateway.service --property=MainPID"
+    remedy: "sudo systemctl restart globular-gateway.service; node-agent runtime check clears hash_drift within 30s"
+
+  - id: routes_not_published_without_xds
+    description: >
+      If xds is unreachable at gateway startup, no routes are published to Envoy
+      and all admin UI traffic fails with 404.
+    diagnosis: "Check globular-xds.service status; inspect gateway logs for xDS registration errors."
+    remedy: "Start xds before gateway; restart gateway after xds is healthy."
+
+safe_degraded_modes:
+  - "If gateway is down, Envoy continues serving already-registered routes."
+
+remediation_workflows:
+  - infrastructure-service-restart
+
+required_tests:
+  - TestGatewayRestartAfterInstall
+  - TestDay1JoinViaCurl
+  - TestHashDriftDetection
+
+required_permissions:
+  - etcd:read:/globular/services/
+
+admission:
+  strict: true
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

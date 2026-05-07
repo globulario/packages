@@ -1,0 +1,80 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: keepalived
+package: keepalived
+package_kind: infrastructure
+summary: >
+  Keepalived manages the cluster VIP (Virtual IP, 10.0.0.100) using VRRP for
+  failover between control-plane nodes. Configured by node-agent writing to
+  /etc/keepalived/keepalived.conf. The entrypoint is bin/noop — keepalived is
+  managed as a system package, not a Globular binary. No hash_drift is possible
+  because no Globular binary is executed. Has no systemd unit owned by Globular.
+
+owns:
+  etcd_keys:
+    - /globular/ingress/v1/status/{node_id}
+  systemd_units: []
+  filesystem_paths:
+    - /etc/keepalived/keepalived.conf
+  event_types:
+    - ingress.vip.failover
+
+reads:
+  etcd_keys:
+    - /globular/ingress/v1/spec
+    - /globular/system/config
+
+writes:
+  etcd_keys:
+    - /globular/ingress/v1/status/{node_id}
+
+depends_on: []
+
+emits:
+  - ingress.vip.failover
+
+subscribes: []
+
+invariants:
+  - keepalived.config_written_by_node_agent
+  - keepalived.vip_floats_between_control_plane_nodes
+  - keepalived.no_hash_drift_noop_entrypoint
+
+forbidden_fixes:
+  - hardcode_vip_in_application_code
+  - write_keepalived_config_outside_node_agent
+
+known_failure_modes:
+  - id: vip_missing_from_tls_cert
+    description: >
+      If the cluster VIP is not included in the TLS certificate SANs, all traffic
+      routed through the VIP fails with TLS handshake errors. Caused a 16-hour
+      silent outage on nuc.
+    diagnosis: "openssl x509 -in /var/lib/globular/pki/issued/services/service.crt -text | grep -A1 'Subject Alternative Name'; verify VIP is listed."
+    remedy: "Reissue service certificate including VIP in SANs; deploy updated cert to all nodes."
+
+  - id: vip_failover_storm
+    description: >
+      Rapid VRRP state changes (failover storms) can occur if keepalived health
+      checks are misconfigured or a node oscillates between healthy and unhealthy.
+    diagnosis: "Check /globular/ingress/v1/status/ keys for rapid state changes; inspect keepalived logs."
+    remedy: "Tune keepalived health check intervals; ensure network stability."
+
+safe_degraded_modes:
+  - "If VIP failover occurs, traffic is briefly interrupted then resumes on the new VIP holder."
+
+remediation_workflows:
+  - ingress-vip-repair
+
+required_tests:
+  - TestVipInTlsCertSans
+  - TestKeepalived_ConfigWrittenByNodeAgent
+
+required_permissions:
+  - etcd:read:/globular/ingress/v1/spec
+  - etcd:write:/globular/ingress/v1/status/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false

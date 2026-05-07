@@ -1,0 +1,113 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: ai-executor
+package: ai-executor
+package_kind: service
+summary: >
+  AI diagnosis and remediation executor. Implements 3-tier permission model:
+  Tier 0 (OBSERVE) is always safe, Tier 1 (AUTO_REMEDIATE) executes pre-approved
+  actions such as service restarts and cache clears, and Tier 2 (REQUIRE_APPROVAL)
+  requires a human operator to approve before execution. All actions produce durable
+  audit records. The cluster must function without this service — it is supplementary.
+
+owns:
+  etcd_keys:
+    - /globular/ai/jobs/{incident_id}
+  systemd_units:
+    - globular-ai-executor.service
+  filesystem_paths: []
+  event_types:
+    - ai.executor.job.started
+    - ai.executor.job.completed
+    - ai.executor.job.failed
+    - ai.executor.approval.requested
+
+reads:
+  etcd_keys:
+    - /globular/nodes/{node_id}/status
+    - /globular/nodes/{node_id}/packages/{kind}/{name}
+    - /globular/resources/DesiredService/{name}
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+
+writes:
+  etcd_keys:
+    - /globular/ai/jobs/{incident_id}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads cluster state and writes job records to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists incident history and knowledge base via ai-memory.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Must authenticate before issuing any remediation action.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: RBAC enforces tier permissions for every action.
+
+  - service: workflow
+    phase: day1
+    required: true
+    reason: Tier 1 and Tier 2 actions are dispatched through the workflow service.
+
+emits:
+  - ai.executor.job.started
+  - ai.executor.job.completed
+  - ai.executor.job.failed
+  - ai.executor.approval.requested
+
+subscribes: []
+
+invariants:
+  - ai.executor.tier0.read_only
+  - ai.executor.tier2.requires_human_approval
+  - ai.executor.all_actions.produce_audit_record
+  - ai.executor.cluster_operates_without_executor
+
+forbidden_fixes:
+  - auto_rollback_on_crash
+  - bypass_rbac_for_remediation
+  - execute_tier2_without_approval
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: executor_lease_stall
+    description: >
+      A workflow crash leaves a stale executor lease. Retry attempts fail for up to
+      15 minutes until the lease TTL expires.
+    diagnosis: "Check /globular/ai/jobs/{incident_id} for stale RUNNING state; compare lease timestamp."
+    remedy: "Wait for lease TTL expiry (15 min) or manually delete stale job key in etcd."
+
+safe_degraded_modes:
+  - "If ai-executor is down, the cluster continues operating through its deterministic convergence model."
+  - "Tier 0 observation functions are independent of workflow availability."
+
+remediation_workflows:
+  - ai-incident-response
+  - ai-auto-remediate
+
+required_tests:
+  - TestTier0ReadOnly
+  - TestTier2RequiresApproval
+  - TestAuditRecordOnEveryAction
+  - TestClusterOperatesWithoutExecutor
+
+required_permissions:
+  - etcd:read:/globular/
+  - etcd:write:/globular/ai/jobs/
+  - rbac:validate:ai-executor
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

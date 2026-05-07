@@ -1,0 +1,78 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: event
+package: event
+package_kind: service
+summary: >
+  Pub/sub event bus for cluster-wide event propagation. Priority 4 (early startup).
+  Services subscribe to event types and receive asynchronous notifications. Used by
+  ai-watcher, conversation, and other services for real-time event delivery. Backed
+  by etcd for durable event ordering.
+
+owns:
+  etcd_keys:
+    - /globular/events/
+    - /globular/services/event/config
+    - /globular/services/event/instances/{node}
+  systemd_units:
+    - globular-event.service
+  filesystem_paths: []
+  event_types:
+    - event.subscription.added
+    - event.subscription.removed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/event/config
+
+writes:
+  etcd_keys:
+    - /globular/events/
+    - /globular/services/event/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Event ordering and durable delivery requires etcd as the backing store.
+
+emits:
+  - event.subscription.added
+  - event.subscription.removed
+
+subscribes: []
+
+invariants:
+  - event.subscribers_notified_on_match
+  - event.delivery_ordered_per_topic
+
+forbidden_fixes:
+  - hardcode_event_topics
+
+known_failure_modes:
+  - id: subscription_stream_timeout
+    description: >
+      Long-lived subscription streams can time out and disconnect subscribers.
+      Subscribers must implement reconnect logic.
+    diagnosis: "Check event service logs for stream close events; verify subscriber reconnect behavior."
+    remedy: "Subscribers reconnect on next RPC; ensure reconnect logic is implemented."
+
+safe_degraded_modes:
+  - "If event service is down, subscribers stop receiving events; they resume when service restarts."
+
+remediation_workflows: []
+
+required_tests:
+  - TestEventDeliveryOrdered
+  - TestSubscriberReconnect
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/events/
+  - etcd:write:/globular/services/event/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

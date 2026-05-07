@@ -1,0 +1,84 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: mail
+package: mail
+package_kind: service
+summary: >
+  Email sending and receiving service. Provides SMTP/IMAP bridging for cluster
+  notifications and user email delivery. All access is authenticated and
+  RBAC-authorized. Used by alertmanager and other services for human notification.
+
+owns:
+  etcd_keys:
+    - /globular/services/mail/config
+    - /globular/services/mail/instances/{node}
+  systemd_units:
+    - globular-mail.service
+  filesystem_paths: []
+  event_types:
+    - mail.message.sent
+    - mail.message.received
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/mail/config
+
+writes:
+  etcd_keys:
+    - /globular/services/mail/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all mail send/receive requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces who can send mail through the cluster.
+
+emits:
+  - mail.message.sent
+  - mail.message.received
+
+subscribes: []
+
+invariants:
+  - mail.all_rpcs_have_authz_annotation
+  - mail.credentials_not_in_etcd
+
+forbidden_fixes:
+  - store_smtp_credentials_in_etcd
+  - bypass_rbac_for_mail
+
+known_failure_modes:
+  - id: smtp_relay_unreachable
+    description: >
+      If the external SMTP relay is unreachable, outbound mail is queued or dropped.
+    diagnosis: "Check mail service logs for SMTP connection errors."
+    remedy: "Restore SMTP relay connectivity; mail service retries queued messages."
+
+safe_degraded_modes:
+  - "If mail service is down, the cluster continues operating; notifications are suspended."
+
+remediation_workflows: []
+
+required_tests:
+  - TestMailAuthzAnnotations
+  - TestSmtpCredentialsNotInEtcd
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/mail/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

@@ -1,0 +1,89 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: authentication
+package: authentication
+package_kind: service
+summary: >
+  JWT authentication service running on port 10101. Issues ephemeral tokens to
+  authenticated subjects. Tokens are generated at runtime and cached in memory
+  with a 60-second expiry margin — they are NEVER stored in etcd, config files,
+  or source code. All other services depend on authentication being available
+  before they can accept authenticated requests.
+
+owns:
+  etcd_keys:
+    - /globular/services/authentication/config
+    - /globular/services/authentication/instances/{node}
+  systemd_units:
+    - globular-authentication.service
+  filesystem_paths:
+    - /var/lib/globular/keys/
+  event_types:
+    - auth.token.issued
+    - auth.token.revoked
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/authentication/config
+
+writes:
+  etcd_keys:
+    - /globular/services/authentication/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config from etcd; publishes instance record.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists account credentials and session data in ScyllaDB.
+
+emits:
+  - auth.token.issued
+  - auth.token.revoked
+
+subscribes: []
+
+invariants:
+  - auth.tokens_never_stored_in_etcd
+  - auth.tokens_never_stored_in_source
+  - auth.tokens_ephemeral_runtime_only
+
+forbidden_fixes:
+  - store_tokens_in_etcd
+  - store_tokens_in_config_files
+  - store_tokens_in_source_code
+  - hardcode_signing_keys
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, authentication cannot validate credentials and
+      all token issuance fails. Services that cache tokens continue operating for
+      the token lifetime.
+    diagnosis: "Check scylla-server.service status; verify authentication service logs for connection errors."
+    remedy: "Restore ScyllaDB quorum; authentication reconnects automatically."
+
+safe_degraded_modes:
+  - "Services that have valid cached tokens continue operating for the token TTL."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestTokensNotStoredInEtcd
+  - TestTokensEphemeral
+  - TestScyllaDBRequiredForCredentials
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/authentication/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

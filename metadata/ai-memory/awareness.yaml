@@ -1,0 +1,83 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: ai-memory
+package: ai-memory
+package_kind: service
+summary: >
+  Persistent AI knowledge store backed by ScyllaDB. Provides memory_store,
+  memory_query, memory_get, memory_update, memory_delete, and memory_list RPCs
+  used by AI agents to accumulate and retrieve knowledge across sessions. Runs on
+  port 10200. The cluster must function without this service — it is supplementary.
+
+owns:
+  etcd_keys:
+    - /globular/services/ai-memory/config
+    - /globular/services/ai-memory/instances/{node}
+  systemd_units:
+    - globular-ai-memory.service
+  filesystem_paths: []
+  event_types:
+    - ai.memory.stored
+    - ai.memory.deleted
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/{service_id}/config
+
+writes:
+  etcd_keys:
+    - /globular/services/ai-memory/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: All memory records are persisted in ScyllaDB; service cannot function without it.
+
+emits:
+  - ai.memory.stored
+  - ai.memory.deleted
+
+subscribes: []
+
+invariants:
+  - ai.memory.scylladb_is_sole_store
+  - ai.memory.cluster_operates_without_memory
+
+forbidden_fixes:
+  - store_memory_in_etcd_values
+  - store_memory_in_local_files_as_truth
+
+known_failure_modes:
+  - id: scylladb_unavailable
+    description: >
+      If ScyllaDB is unreachable, all memory RPCs fail. The cluster itself continues
+      operating; only AI knowledge accumulation is impacted.
+    diagnosis: "Check scylla-server.service status; query ScyllaDB health on port 9042."
+    remedy: "Restore ScyllaDB quorum; ai-memory will reconnect automatically on next RPC."
+
+safe_degraded_modes:
+  - "If ai-memory is down, the cluster continues operating through its deterministic convergence model."
+  - "AI agents fall back to session-local context when memory service is unavailable."
+
+remediation_workflows:
+  - scylladb-repair
+
+required_tests:
+  - TestMemoryStoreAndRetrieve
+  - TestScyllaDBRequiredAtStartup
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/ai-memory/instances/
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false

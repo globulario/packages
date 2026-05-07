@@ -1,0 +1,120 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: media
+package: media
+package_kind: service
+summary: >
+  Media management service for audio, video, and image assets. Stores media
+  blobs in MinIO, metadata in ScyllaDB, and uses ffmpeg for transcoding and
+  yt-dlp for media download. All access is authenticated and RBAC-authorized.
+  MinIO is a cache — ScyllaDB and local POSIX CAS are authoritative.
+
+owns:
+  etcd_keys:
+    - /globular/services/media/config
+    - /globular/services/media/instances/{node}
+  systemd_units:
+    - globular-media.service
+  filesystem_paths: []
+  event_types:
+    - media.asset.uploaded
+    - media.transcode.completed
+
+reads:
+  etcd_keys:
+    - /globular/system/config
+    - /globular/services/media/config
+
+writes:
+  etcd_keys:
+    - /globular/services/media/instances/{node}
+
+depends_on:
+  - service: etcd
+    phase: bootstrap
+    required: true
+    reason: Reads service config and publishes instance record to etcd.
+
+  - service: scylladb
+    phase: day0
+    required: true
+    reason: Persists media metadata and catalog in ScyllaDB.
+
+  - service: authentication
+    phase: day1
+    required: true
+    reason: Authenticates all media upload and download requests.
+
+  - service: rbac
+    phase: day1
+    required: true
+    reason: Enforces access control for media operations.
+
+  - service: minio
+    phase: day1
+    required: true
+    reason: Stores media blobs in MinIO object storage.
+
+  - service: ffmpeg
+    phase: day1
+    required: false
+    reason: Used for transcoding; media service degrades gracefully without it.
+    safe_escape_hatch: Returns original format without transcoding when ffmpeg is unavailable.
+
+  - service: yt-dlp
+    phase: day1
+    required: false
+    reason: Used for media download from external sources; optional feature.
+    safe_escape_hatch: Media download from external URLs is disabled when yt-dlp is unavailable.
+
+emits:
+  - media.asset.uploaded
+  - media.transcode.completed
+
+subscribes: []
+
+invariants:
+  - media.all_rpcs_have_authz_annotation
+  - media.minio_not_sole_truth
+
+forbidden_fixes:
+  - bypass_rbac_for_media_writes
+  - treat_minio_as_sole_authority
+  - store_tokens_in_etcd
+
+known_failure_modes:
+  - id: minio_unavailable
+    description: >
+      If MinIO is unreachable, media uploads and downloads fail.
+    diagnosis: "Check minio service health on port 9000."
+    remedy: "Restore MinIO quorum."
+
+  - id: ffmpeg_absent
+    description: >
+      If ffmpeg is not installed, transcoding requests fail. Original files remain accessible.
+    diagnosis: "which ffmpeg; check media service logs for exec errors."
+    remedy: "Install ffmpeg package via node-agent."
+
+safe_degraded_modes:
+  - "If media service is down, the cluster continues operating; media operations are suspended."
+  - "Without ffmpeg, media is served in original format only."
+
+remediation_workflows:
+  - scylladb-repair
+  - node-package-repair
+
+required_tests:
+  - TestMediaAuthzAnnotations
+  - TestMinioNotSoleTruth
+  - TestDegradedWithoutFfmpeg
+
+required_permissions:
+  - etcd:read:/globular/system/config
+  - etcd:write:/globular/services/media/instances/
+  - minio:read:media
+  - minio:write:media
+
+admission:
+  strict: false
+  allow_unknown_dependencies: false
+  allow_privileged_state_writes: false
