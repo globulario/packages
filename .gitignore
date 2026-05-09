@@ -1,0 +1,4 @@
+# Compiled binaries — built by CI, not stored in git
+bin/
+*.tar.gz
+*.tgz

@@ -128,6 +128,7 @@ steps:
           Type=simple
           User=globular
           Group=globular
+          ExecStartPre=+/bin/sh -c 'pkill -9 -f mcp_server || true'
           ExecStart={{.Prefix}}/bin/mcp
           Restart=on-failure
           RestartSec=5
@@ -143,7 +144,14 @@ steps:
     services:
       - globular-mcp.service
 
-  # No start_services or health_checks — the MCP server starts after all
-  # dependencies (etcd, auth, etc.) are up. During Day-0, other services
-  # aren't running yet. Systemd will start it on next boot or the Day-0
-  # script starts all services together at the end.
+  - id: start-mcp
+    type: start_services
+    services:
+      - globular-mcp.service
+    binaries:
+      globular-mcp.service: mcp
+
+  - id: health-mcp
+    type: health_checks
+    services:
+      - globular-mcp.service
