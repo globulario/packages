@@ -128,7 +128,7 @@ steps:
           Type=simple
           User=globular
           Group=globular
-          ExecStartPre=+/bin/sh -c 'pkill -9 -f mcp_server || true'
+          ExecStartPre=+/bin/sh -c 'pkill -9 -x mcp_server || true'
           ExecStart={{.Prefix}}/bin/mcp
           Restart=on-failure
           RestartSec=5
