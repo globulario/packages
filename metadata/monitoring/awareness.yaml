@@ -4,9 +4,11 @@ service: monitoring
 package: monitoring
 package_kind: service
 summary: >
-  Monitoring service providing metrics dashboards, alert rule management, and
-  cluster observability. Aggregates data from Prometheus and ScyllaDB. Exposes
-  metrics query RPCs authenticated and RBAC-authorized for operator dashboards.
+  Monitoring service: thin RBAC-aware wrapper over the Prometheus HTTP API
+  (Query, QueryRange, Alerts, LabelNames, ...). Exposes the same surface as
+  authenticated, authorized gRPC RPCs for operator dashboards. Stateless —
+  no own storage; every query proxies to a Prometheus endpoint resolved
+  from /globular/services/monitoring/config in etcd.
 
 owns:
   etcd_keys:
@@ -34,15 +36,15 @@ depends_on:
     required: true
     reason: Reads service config and publishes instance record to etcd.
 
-  - service: scylladb
-    phase: day0
-    required: true
-    reason: Reads historical metrics and alert history from ScyllaDB.
-
   - service: prometheus
     phase: day1
     required: true
-    reason: Queries current metrics from Prometheus for dashboards and alerting.
+    reason: >
+      Sole metrics backend. Every monitoring RPC proxies to this Prometheus
+      endpoint. If Prometheus is unreachable from the node hosting the
+      monitoring service, every query returns 5xx. Verified against
+      golang/monitoring/monitoring_store/prometheus.go (the only store
+      implementation).
 
   - service: authentication
     phase: day1
@@ -69,10 +71,17 @@ forbidden_fixes:
 known_failure_modes:
   - id: prometheus_unavailable
     description: >
-      If Prometheus is unreachable, real-time metrics queries fail. Historical
-      data from ScyllaDB remains accessible.
-    diagnosis: "Check globular-prometheus.service status; inspect monitoring logs."
-    remedy: "Restore Prometheus; monitoring reconnects automatically."
+      If Prometheus is unreachable from the monitoring service's node, ALL
+      queries fail (no fallback store exists). Service unit may stay active
+      but every RPC returns 5xx and any health check that performs a real
+      query goes red.
+    diagnosis: >
+      Check globular-prometheus.service on the local node and the
+      Prometheus address in /globular/services/monitoring/config. Curl the
+      Prometheus /-/healthy endpoint from the monitoring node.
+    remedy: >
+      Restore Prometheus on the affected node, or fix the configured
+      Prometheus address in etcd. Monitoring reconnects automatically.
 
 safe_degraded_modes:
   - "If monitoring service is down, the cluster continues operating; dashboards are unavailable."
