@@ -9,6 +9,7 @@ User=globular
 Group=globular
 WorkingDirectory={{.StateDir}}/mcp
 ExecStartPre=+/bin/sh -c 'pkill -9 -x mcp_server || true'
+ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/awareness/runtime && chown globular:globular {{.StateDir}}/awareness/runtime'
 ExecStart={{.Prefix}}/bin/mcp
 Restart=on-failure
 RestartSec=5
