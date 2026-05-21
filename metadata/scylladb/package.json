@@ -23,6 +23,5 @@
     "local-db"
   ],
   "health_check_unit": "scylla-server.service",
-  "health_check_port": 9042,
-  "entrypoint_checksum": "sha256:99d0ea108a6000e0481c6cdb92f77dc9c19c9c47bdba74b4720b375daffc2612"
+  "health_check_port": 9042
 }

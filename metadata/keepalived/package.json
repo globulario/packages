@@ -17,6 +17,5 @@
     "high-availability",
     "vip"
   ],
-  "license": "GPL-2.0",
-  "entrypoint_checksum": "sha256:99d0ea108a6000e0481c6cdb92f77dc9c19c9c47bdba74b4720b375daffc2612"
+  "license": "GPL-2.0"
 }
