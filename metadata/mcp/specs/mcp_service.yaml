@@ -130,7 +130,7 @@ steps:
           Group=globular
           ExecStartPre=+/bin/sh -c 'pkill -9 -x mcp_server || true'
           ExecStart={{.Prefix}}/bin/mcp
-          Restart=on-failure
+          Restart=always
           RestartSec=5
           LimitNOFILE=524288
           Environment=GLOBULAR_MCP_CONFIG={{.StateDir}}/mcp/config.json
