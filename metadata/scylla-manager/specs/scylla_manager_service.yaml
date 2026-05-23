@@ -112,7 +112,7 @@ steps:
           User=globular
           Group=globular
           ExecStartPre=/bin/sh -c 'for i in $(seq 1 90); do ss -lnt | grep -q ":9042 " && exit 0; sleep 1; done; echo "scylla 9042 not ready"; exit 1'
-          ExecStartPre={{.Prefix}}/bin/scylla-manager-configure
+          ExecStartPre=/bin/sh -c 'if [ -x "{{.Prefix}}/bin/scylla-manager-configure" ]; then exec "{{.Prefix}}/bin/scylla-manager-configure"; fi; CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"; [ -f "$CFG" ] && exit 0; SCYLLA_CFG="/etc/scylla/scylla.yaml"; CQL_HOST=""; if [ -f "$SCYLLA_CFG" ]; then CQL_HOST=$(grep -E "^rpc_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E "^listen_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); fi; if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then CQL_HOST=$(ss -lnt | awk "/:9042 /{split(\$4,a,\":\"); print a[1]; exit}"); fi; [ -n "$CQL_HOST" ] && [ "$CQL_HOST" != "127.0.0.1" ] || { echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2; exit 1; }; { printf "%s\n" "# Scylla Manager configuration (managed by Globular)" "http: ${CQL_HOST}:5080" "" "database:" "  hosts:" "    - ${CQL_HOST}" "  port: 9042"; } > "$CFG"; chown globular:globular "$CFG"; chmod 0640 "$CFG"'
           ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
           Restart=on-failure
           RestartSec=5
