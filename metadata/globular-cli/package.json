@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/globularcli",
+  "entrypoint": "bin/globular",
   "defaults": {
     "configDir": "",
     "spec": "specs/globular_cli_cmd.yaml"

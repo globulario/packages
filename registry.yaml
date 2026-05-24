@@ -350,7 +350,7 @@ packages:
 
   - name: globular-cli
     kind: command
-    binary: globularcli
+    binary: globular
     go_target: globularcli
     version_source: platform
     publisher_id: core@globular.io

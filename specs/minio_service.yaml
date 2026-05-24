@@ -138,6 +138,7 @@ steps:
           ExecStartPre=+/usr/bin/chown -R globular:globular {{.MinioDataDir}}
           ExecStartPre=+/usr/bin/chmod 0700 {{.StateDir}}/minio
           ExecStartPre=+/usr/bin/chmod 0700 {{.MinioDataDir}}
+          ExecStartPre=+/bin/sh -c 'chmod o+x "$(dirname {{.MinioDataDir}})" "$(dirname "$(dirname {{.MinioDataDir}})")" 2>/dev/null || true'
           ExecStartPre=/usr/bin/test -w {{.MinioDataDir}}
           EnvironmentFile=-{{.StateDir}}/minio/minio.env
           ExecStart={{.Prefix}}/bin/minio server {{.MinioDataDir}} --address {{.NodeIP}}:9000 --console-address 127.0.0.1:9001

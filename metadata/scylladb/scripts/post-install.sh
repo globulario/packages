@@ -1,54 +1,40 @@
 #!/bin/bash
 # post-install.sh — ScyllaDB post-install for Day-0 and Day-1.
 #
-# CRITICAL: ScyllaDB 2025.3+ uses Raft-based topology. The FIRST START
-# bootstraps an irreversible Raft group. Config must be correct BEFORE
-# the first start — there is no second chance.
-#
-# This script:
-#   1. Stops ScyllaDB (must not be running)
-#   2. Detects local IP and discovers seed nodes from config.json/etcd
-#   3. Wipes data for clean Raft bootstrap
-#   4. Writes a complete scylla.yaml (never trusts dpkg default)
-#   5. Creates /etc/scylla.d/ and systemd overrides
-#   6. Starts ScyllaDB with the final config
-#   7. Validates readiness
+# Non-destructive invariant:
+#   - Existing Scylla data is protected state.
+#   - Post-install must never wipe existing data automatically.
+#   - Data wipe requires explicit dual confirmation flags.
 
 set -euo pipefail
 
 STATE_DIR="${STATE_DIR:-/var/lib/globular}"
 NODE_IP="${NODE_IP:-}"
+SCYLLA_DATA_DIR="/var/lib/scylla/data"
+SCYLLA_COMMITLOG_DIR="/var/lib/scylla/commitlog"
+SCYLLA_YAML="/etc/scylla/scylla.yaml"
+
+FORCE_SCYLLA_REINIT="${FORCE_SCYLLA_REINIT:-false}"
+I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED="${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED:-false}"
 
 echo "[scylladb/post-install] Starting ScyllaDB post-install..."
 
-# ── 0. Protect existing ScyllaDB data ────────────────────────────────────
-# ScyllaDB's Raft identity lives in /var/lib/scylla/data/system/. If that
-# directory exists, this node has ALREADY bootstrapped into a Raft group.
-# Wiping it would destroy the node's identity and cause an unrecoverable
-# raft quorum deadlock. In that case, only update config and restart —
-# NEVER wipe data.
-EXISTING_DATA=false
-if [[ -d /var/lib/scylla/data/system ]]; then
-    EXISTING_DATA=true
-    echo "[scylladb/post-install] Existing ScyllaDB data found — will NOT wipe (Raft identity preserved)"
-fi
-
-# Also skip entirely if ScyllaDB is already running and serving CQL.
+# 0) Fast exit if already healthy.
 if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
-    SCYLLA_IP=$(grep -oP "listen_address:\s*'\K[^']+" /etc/scylla/scylla.yaml 2>/dev/null || echo "")
+    SCYLLA_IP=$(grep -oP "listen_address:\s*'\K[^']+" "${SCYLLA_YAML}" 2>/dev/null || echo "")
     if [[ -n "${SCYLLA_IP}" ]] && timeout 3 bash -c "echo >/dev/tcp/${SCYLLA_IP}/9042" 2>/dev/null; then
-        echo "[scylladb/post-install] ScyllaDB is already running and serving CQL on ${SCYLLA_IP}:9042"
+        echo "[scylladb/post-install] ScyllaDB already serving CQL on ${SCYLLA_IP}:9042"
         echo "[scylladb/post-install] Skipping reinstall to protect Raft cluster state"
         exit 0
     fi
-    echo "[scylladb/post-install] ScyllaDB is active but CQL not ready — will update config and restart"
+    echo "[scylladb/post-install] ScyllaDB active but not ready — proceeding non-destructively"
 fi
 
-# ── 0b. Ensure ScyllaDB is STOPPED ──────────────────────────────────────
+# 0b) Stop before config changes.
 systemctl stop scylla-server.service 2>/dev/null || true
 echo "[scylladb/post-install] ScyllaDB stopped"
 
-# ── 1. Detect local IP ───────────────────────────────────────────────────
+# 1) Detect local IP.
 if [[ -z "${NODE_IP}" ]]; then
     NODE_IP=$(ip route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
 fi
@@ -61,9 +47,7 @@ if [[ -z "${NODE_IP}" ]]; then
 fi
 echo "[scylladb/post-install] Node IP: ${NODE_IP}"
 
-# ── 2. Discover seed nodes ───────────────────────────────────────────────
-# Read the bootstrap host from etcd_endpoints (written by join script).
-# The first non-local endpoint is the Day-0 seed node.
+# 2) Discover seed candidates from etcd endpoints.
 SEED_IP="${NODE_IP}"
 ETCD_ENDPOINTS="${STATE_DIR}/config/etcd_endpoints"
 if [[ -f "${ETCD_ENDPOINTS}" ]]; then
@@ -77,37 +61,30 @@ if [[ -f "${ETCD_ENDPOINTS}" ]]; then
 fi
 echo "[scylladb/post-install] Seeds: ${SEED_IP}"
 
-# ── 2b. Check if existing seeds match the cluster ─────────────────────────
-# Used by both the data wipe (section 4) and yaml rewrite (section 5) guards.
-# If existing Raft data exists but seeds point to the wrong cluster, the node
-# bootstrapped isolated and never joined. Both data and config must be reset.
-NEEDS_SEED_FIX=false
-if [[ "${EXISTING_DATA}" == "true" && -f /etc/scylla/scylla.yaml ]]; then
-    CURRENT_SEEDS=$(grep -A2 'seeds:' /etc/scylla/scylla.yaml | grep -oP "seeds:\s*'\K[^']+" || echo "")
-    SEEDS_OK=false
-    if [[ -n "${CURRENT_SEEDS}" && -n "${SEED_IP}" ]]; then
-        IFS=',' read -ra NEW_SEEDS <<< "${SEED_IP}"
-        for s in "${NEW_SEEDS[@]}"; do
-            s=$(echo "$s" | xargs)
-            if [[ "${CURRENT_SEEDS}" == *"${s}"* ]]; then
-                SEEDS_OK=true
-                break
-            fi
-        done
-    fi
-    if [[ "${SEEDS_OK}" != "true" ]]; then
-        NEEDS_SEED_FIX=true
-        echo "[scylladb/post-install] Seed mismatch detected (have: ${CURRENT_SEEDS}, need: ${SEED_IP}) — will wipe stale Raft data and rewrite config"
+# 2b) Seed mismatch is advisory only (non-destructive).
+if [[ -f "${SCYLLA_YAML}" ]]; then
+    CURRENT_SEEDS=$(grep -A2 'seeds:' "${SCYLLA_YAML}" | grep -oP "seeds:\s*'\K[^']+" || echo "")
+    if [[ -n "${CURRENT_SEEDS}" && -n "${SEED_IP}" && "${CURRENT_SEEDS}" != *"${SEED_IP%%,*}"* ]]; then
+        echo "[scylladb/post-install] WARNING: Seeds mismatch detected (have: ${CURRENT_SEEDS}, need: ${SEED_IP})"
+        echo "[scylladb/post-install] Data will be preserved. Controller remediation required if node cannot join."
+        mkdir -p "${STATE_DIR}/state/scylladb"
+        cat > "${STATE_DIR}/state/scylladb/remediation-required.json" <<EOF_JSON
+{
+  "reason": "seed_mismatch",
+  "existing_seeds": "${CURRENT_SEEDS}",
+  "expected_seed": "${SEED_IP}",
+  "timestamp": "$(date -Iseconds)"
+}
+EOF_JSON
     fi
 fi
 
-# ── 3. Copy TLS certificates ─────────────────────────────────────────────
+# 3) Copy TLS certificates.
 SCYLLA_TLS_DIR="/etc/scylla/tls"
 PKI_CERT_DIR="${STATE_DIR}/pki/issued/services"
 PKI_DIR="${STATE_DIR}/pki"
 
 mkdir -p "${SCYLLA_TLS_DIR}"
-
 if [[ -f "${PKI_CERT_DIR}/service.crt" ]]; then
     cp "${PKI_CERT_DIR}/service.crt" "${SCYLLA_TLS_DIR}/server.crt"
     cp "${PKI_CERT_DIR}/service.key" "${SCYLLA_TLS_DIR}/server.key"
@@ -121,23 +98,43 @@ else
     echo "[scylladb/post-install] WARNING: PKI certs not found — TLS setup skipped"
 fi
 
-# ── 4. Wipe data for clean Raft bootstrap (ONLY on first install or seed mismatch)
-if [[ "${EXISTING_DATA}" == "true" && "${NEEDS_SEED_FIX}" != "true" ]]; then
-    echo "[scylladb/post-install] SKIPPING data wipe — existing Raft identity in /var/lib/scylla/data/system/"
-    echo "[scylladb/post-install] To force a clean bootstrap, manually run: rm -rf /var/lib/scylla/data"
-elif [[ "${NEEDS_SEED_FIX}" == "true" ]]; then
-    echo "[scylladb/post-install] Wiping STALE Raft data (seeds mismatch — node never joined cluster)..."
-    rm -rf /var/lib/scylla/data /var/lib/scylla/commitlog /var/lib/scylla/hints \
-           /var/lib/scylla/view_hints /var/lib/scylla/coredump
-else
-    echo "[scylladb/post-install] Wiping data for clean Raft bootstrap (first install)..."
-    rm -rf /var/lib/scylla/data /var/lib/scylla/commitlog /var/lib/scylla/hints \
-           /var/lib/scylla/view_hints /var/lib/scylla/coredump
+# 4) Non-destructive data handling + explicit forced reinit gate.
+SCYLLA_HAS_EXISTING_DATA=false
+if [[ -d "${SCYLLA_DATA_DIR}/system" ]] || find "${SCYLLA_DATA_DIR}" -mindepth 1 -maxdepth 1 2>/dev/null | grep -q .; then
+    SCYLLA_HAS_EXISTING_DATA=true
 fi
-mkdir -p /var/lib/scylla/data /var/lib/scylla/commitlog
+
+if [[ "${SCYLLA_HAS_EXISTING_DATA}" == "true" ]]; then
+    echo "[scylladb/post-install] Existing ScyllaDB data detected under ${SCYLLA_DATA_DIR}"
+    echo "[scylladb/post-install] Refusing to wipe data during post-install"
+
+    if [[ "${FORCE_SCYLLA_REINIT}" == "true" && "${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED}" == "true" ]]; then
+        echo "[scylladb/post-install] FORCE_SCYLLA_REINIT confirmed. This will destroy local ScyllaDB data."
+        if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
+            echo "[scylladb/post-install] ERROR: Refusing forced wipe while ScyllaDB is running" >&2
+            exit 1
+        fi
+
+        mkdir -p "${STATE_DIR}/audit"
+        echo "$(date -Iseconds) forced ScyllaDB reinit on $(hostname) data_dir=${SCYLLA_DATA_DIR}" >> "${STATE_DIR}/audit/scylladb-reinit.log"
+
+        rm -rf /var/lib/scylla/data \
+               /var/lib/scylla/commitlog \
+               /var/lib/scylla/hints \
+               /var/lib/scylla/view_hints \
+               /var/lib/scylla/coredump
+        echo "[scylladb/post-install] Forced reinit wipe completed"
+    else
+        echo "[scylladb/post-install] Keeping existing data and continuing with non-destructive config update"
+    fi
+else
+    echo "[scylladb/post-install] No existing ScyllaDB data detected; initializing data directories"
+fi
+
+mkdir -p "${SCYLLA_DATA_DIR}" "${SCYLLA_COMMITLOG_DIR}"
 chown -R scylla:scylla /var/lib/scylla 2>/dev/null || true
 
-# Ensure /var/lib/scylla/conf → /etc/scylla symlink
+# Ensure /var/lib/scylla/conf -> /etc/scylla symlink.
 SCYLLA_DATA_CONF="/var/lib/scylla/conf"
 if [[ -L "${SCYLLA_DATA_CONF}" ]]; then
     :
@@ -146,27 +143,13 @@ elif [[ -d "${SCYLLA_DATA_CONF}" ]]; then
 else
     ln -sfn /etc/scylla "${SCYLLA_DATA_CONF}"
 fi
-echo "[scylladb/post-install] Data directories clean"
 
-# ── 5. Write scylla.yaml from scratch ───────────────────────────────────
-# NEVER trust the dpkg default (has listen_address: localhost, seeds: 127.0.0.1).
-# Always write a complete config with correct addresses and seeds.
-#
-# OWNERSHIP GUARD: if this node has already bootstrapped a Raft identity
-# (EXISTING_DATA=true), skip the rewrite. The controller owns scylla.yaml
-# on an active cluster — overwriting it from package defaults would revert
-# cluster-aware seeds to a single-node seed and could break a 3-node cluster.
-# Only write on first install (no existing Raft data directory).
-SCYLLA_YAML="/etc/scylla/scylla.yaml"
+# 5) Write safe default scylla.yaml if absent or when forced reinit was requested.
 mkdir -p /etc/scylla
-
-if [[ "${EXISTING_DATA}" == "true" && "${NEEDS_SEED_FIX}" != "true" && -f "${SCYLLA_YAML}" ]]; then
-    echo "[scylladb/post-install] SKIPPING scylla.yaml rewrite — existing Raft identity with matching seeds"
-else
-echo "[scylladb/post-install] Writing scylla.yaml (seeds: ${SEED_IP}, listen: ${NODE_IP})"
-cat > "${SCYLLA_YAML}" <<EOF
+if [[ ! -f "${SCYLLA_YAML}" || "${FORCE_SCYLLA_REINIT}" == "true" ]]; then
+    echo "[scylladb/post-install] Writing scylla.yaml (seeds: ${SEED_IP}, listen: ${NODE_IP})"
+    cat > "${SCYLLA_YAML}" <<EOF_SCYLLA
 # Generated by Globular post-install — do not edit manually.
-# The controller may overwrite this with cluster-aware config.
 cluster_name: 'globular.internal'
 
 seed_provider:
@@ -206,10 +189,12 @@ compaction_large_partition_warning_threshold_mb: 100
 
 api_port: 10000
 api_address: '${NODE_IP}'
-EOF
-fi  # end EXISTING_DATA guard
+EOF_SCYLLA
+else
+    echo "[scylladb/post-install] Existing scylla.yaml preserved"
+fi
 
-# ── 6. Environment / sysconfig ────────────────────────────────────────────
+# 6) Environment/sysconfig.
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
 fi
@@ -235,49 +220,40 @@ SCYLLA_ARGS="--log-to-syslog 1 --log-to-stdout 0 --default-log-level info --netw
 ENVEOF
 fi
 
-# Ensure /etc/scylla.d/ exists with required conf files.
-# The dpkg unit references EnvironmentFile=/etc/scylla.d/*.conf WITHOUT the
-# optional prefix (-), so the directory MUST exist or systemd fails with
-# "Failed with result 'resources'".
 mkdir -p /etc/scylla.d
 [[ -f /etc/scylla.d/dev-mode.conf ]] || echo "DEV_MODE=--developer-mode=1" > /etc/scylla.d/dev-mode.conf
-[[ -f /etc/scylla.d/memory.conf ]]   || echo "# memory.conf" > /etc/scylla.d/memory.conf
-[[ -f /etc/scylla.d/io.conf ]]       || echo "# io.conf" > /etc/scylla.d/io.conf
-[[ -f /etc/scylla.d/cpuset.conf ]]   || echo "# cpuset.conf" > /etc/scylla.d/cpuset.conf
+[[ -f /etc/scylla.d/memory.conf ]] || echo "# memory.conf" > /etc/scylla.d/memory.conf
+[[ -f /etc/scylla.d/io.conf ]] || echo "# io.conf" > /etc/scylla.d/io.conf
+[[ -f /etc/scylla.d/cpuset.conf ]] || echo "# cpuset.conf" > /etc/scylla.d/cpuset.conf
 
-# ── 7. Systemd overrides ─────────────────────────────────────────────────
-# The dpkg unit references /etc/sysconfig/scylla-server (RHEL) which doesn't
-# exist on Ubuntu. Override to use /etc/default/scylla-server.
+# 7) Systemd overrides.
 SCYLLA_OVERRIDE_DIR="/etc/systemd/system/scylla-server.service.d"
 mkdir -p "${SCYLLA_OVERRIDE_DIR}"
 
-cat > "${SCYLLA_OVERRIDE_DIR}/sysconfdir.conf" <<SYSEOF
+cat > "${SCYLLA_OVERRIDE_DIR}/sysconfdir.conf" <<EOF_SYSCONF
 [Service]
 EnvironmentFile=
 EnvironmentFile=-${SCYLLA_ENV_FILE}
 EnvironmentFile=-/etc/scylla.d/*.conf
-SYSEOF
+EOF_SYSCONF
 
 if [[ ! -f "${SCYLLA_OVERRIDE_DIR}/dependencies.conf" ]]; then
-    cat > "${SCYLLA_OVERRIDE_DIR}/dependencies.conf" <<'DEPEOF'
+    cat > "${SCYLLA_OVERRIDE_DIR}/dependencies.conf" <<'EOF_DEP'
 [Unit]
 After=network-online.target
 Wants=network-online.target
-DEPEOF
+EOF_DEP
 fi
 
 systemctl daemon-reload
 echo "[scylladb/post-install] Systemd overrides installed"
 
-# ── 8. FIRST START — Raft bootstrap happens here ────────────────────────
-echo "[scylladb/post-install] Starting ScyllaDB (Raft bootstrap with seeds: ${SEED_IP})..."
+# 8) Start ScyllaDB.
+echo "[scylladb/post-install] Starting ScyllaDB (non-destructive path, seeds: ${SEED_IP})..."
 systemctl enable scylla-server.service 2>/dev/null || true
 systemctl start scylla-server.service || true
 
-# ── 9. Readiness validation (non-blocking) ────────────────────────────
-# ScyllaDB Raft cluster join can take 3-10 minutes on real hardware.
-# Don't block the installer — the workflow engine has a separate
-# wait_scylladb_ready step that polls for port 9042.
-echo "[scylladb/post-install] ScyllaDB started (Raft join in progress)"
+# 9) Readiness is checked by workflow.
+echo "[scylladb/post-install] ScyllaDB started (join may still be in progress)"
 echo "[scylladb/post-install] Port 9042 readiness will be checked by the workflow engine"
 echo "[scylladb/post-install] ScyllaDB post-install complete (listen: ${NODE_IP}, seeds: ${SEED_IP})"

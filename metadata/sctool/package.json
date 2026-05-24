@@ -1,7 +1,7 @@
 {
   "type": "command",
   "name": "sctool",
-  "version": "3.8.1",
+  "version": "3.10.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/sctool",

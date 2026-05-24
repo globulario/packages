@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   name: sctool
-  version: "3.8.1"
+  version: "3.10.1"
   kind: command
   description: "Scylla Manager CLI client for scheduling repairs, backups, and managing ScyllaDB clusters."
   keywords: [sctool, scylla-manager, cli, repair, backup, scylladb]
