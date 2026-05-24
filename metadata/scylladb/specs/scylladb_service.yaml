@@ -47,7 +47,16 @@ steps:
     type: run_script
     script: prevent-autostart.sh
 
+  # Install from apt when no .deb files are bundled in the artifact (Day-1 path).
+  # The join script sets up the GPG key and apt source before the workflow runs.
+  # Idempotent: no-op if scylla-server is already installed.
+  - id: apt-install-scylladb
+    type: run_script
+    script: apt-install.sh
+    timeout: 5m
+
   # Install .deb packages bundled in the artifact (offline, no internet needed).
+  # No-op when the artifact has no bundled debs (apt-install step handles it).
   - id: install-scylladb-debs
     type: install_local_debs
 
