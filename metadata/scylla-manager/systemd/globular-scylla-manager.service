@@ -2,18 +2,18 @@
 Description=Globular Scylla Manager
 After=network-online.target scylla-server.service
 Wants=network-online.target scylla-server.service
+StartLimitIntervalSec=600
+StartLimitBurst=10
 
 [Service]
 Type=simple
 User=globular
 Group=globular
 WorkingDirectory={{.StateDir}}/scylla-manager
-ExecStartPre=/bin/sh -c 'if [ -x "{{.Prefix}}/bin/scylla-manager-configure" ]; then exec "{{.Prefix}}/bin/scylla-manager-configure"; fi; CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"; [ -f "$CFG" ] && exit 0; SCYLLA_CFG="/etc/scylla/scylla.yaml"; CQL_HOST=""; if [ -f "$SCYLLA_CFG" ]; then CQL_HOST=$(grep -E "^rpc_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\\""); [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E "^listen_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\\""); fi; if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then CQL_HOST=$(ip route get 8.8.8.8 2>/dev/null | awk "/src/{for(i=1;i<=NF;i++) if(\$i==\"src\") print \$(i+1); exit}"); fi; [ -n "$CQL_HOST" ] && [ "$CQL_HOST" != "127.0.0.1" ] || { echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2; exit 1; }; { printf "%s\n" "# Scylla Manager configuration (managed by Globular)" "http: ${CQL_HOST}:5080" "" "database:" "  hosts:" "    - ${CQL_HOST}" "  port: 9042"; } > "$CFG"; chown globular:globular "$CFG"; chmod 0640 "$CFG"'
+ExecStartPre={{.Prefix}}/bin/scylla-manager-configure
 ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
 Restart=on-failure
 RestartSec=10
-StartLimitIntervalSec=600
-StartLimitBurst=10
 LimitNOFILE=100000
 
 [Install]
