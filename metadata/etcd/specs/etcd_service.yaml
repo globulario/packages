@@ -64,6 +64,13 @@ steps:
     install_spec: false
     install_systemd: false
 
+  - id: etcd-join
+    type: etcd_join
+    # Day-1 only: performs ghost cleanup, join-lock, member add, writes etcd.yaml
+    # (initial-cluster-state: existing), writes etcd_endpoints, starts etcd, and
+    # verifies named membership from the bootstrap cluster.
+    # Skipped automatically when --bootstrap-etcd is not provided (Day-0 path).
+
   - id: install-etcd-config
     type: install_files
     files:
