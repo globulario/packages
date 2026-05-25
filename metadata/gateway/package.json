@@ -28,5 +28,5 @@
   ],
   "health_check_unit": "globular-gateway.service",
   "health_check_port": 8080,
-  "entrypoint_checksum": "sha256:70f2b69faf15f245a96187e24afbfdba9c1b8ef1991d6291c77347c8df304dad"
+  "entrypoint_checksum": "sha256:298a81a899af5e99ede91e6037e8a24f03aa813ce3800eb1af191dd4c6e20031"
 }
