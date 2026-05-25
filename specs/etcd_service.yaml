@@ -64,6 +64,50 @@ steps:
     install_spec: false
     install_systemd: false
 
+  - id: install-etcd-service
+    type: install_services
+    units:
+      - name: globular-etcd.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular etcd
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/etcd
+          ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/etcd
+          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/etcd
+          ExecStartPre=+/bin/sh -c 'chown globular:globular {{.StateDir}}/pki/issued/services/service.key {{.StateDir}}/pki/issued/services/service.crt 2>/dev/null || true'
+          ExecStart={{.Prefix}}/bin/etcd --config-file {{.StateDir}}/config/etcd.yaml
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-etcd
+    type: enable_services
+    services:
+      - globular-etcd.service
+
+  - id: etcd-join
+    type: etcd_join
+    # Day-1 only: performs ghost cleanup, join-lock, member add, writes etcd.yaml
+    # (initial-cluster-state: existing), writes etcd_endpoints, starts etcd, and
+    # verifies named membership from the bootstrap cluster.
+    # Skipped automatically when --bootstrap-etcd is not provided (Day-0 path).
+    # NOTE: must come after install-etcd-service so the unit file exists when
+    # this step calls `systemctl start globular-etcd.service`.
+
   - id: install-etcd-config
     type: install_files
     files:
@@ -126,41 +170,6 @@ steps:
 
           # 0 means "use default" (keep it simple unless you want a hard quota)
           quota-backend-bytes: 0
-
-  - id: install-etcd-service
-    type: install_services
-    units:
-      - name: globular-etcd.service
-        owner: root
-        group: root
-        mode: 0644
-        atomic: true
-        content: |
-          [Unit]
-          Description=Globular etcd
-          After=network-online.target
-          Wants=network-online.target
-
-          [Service]
-          Type=simple
-          User=globular
-          Group=globular
-          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/etcd
-          ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/etcd
-          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/etcd
-          ExecStartPre=+/bin/sh -c 'chown globular:globular {{.StateDir}}/pki/issued/services/service.key {{.StateDir}}/pki/issued/services/service.crt 2>/dev/null || true'
-          ExecStart={{.Prefix}}/bin/etcd --config-file {{.StateDir}}/config/etcd.yaml
-          Restart=on-failure
-          RestartSec=2
-          LimitNOFILE=524288
-
-          [Install]
-          WantedBy=multi-user.target
-
-  - id: enable-etcd
-    type: enable_services
-    services:
-      - globular-etcd.service
 
   - id: start-etcd
     type: start_services
