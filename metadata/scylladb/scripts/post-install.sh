@@ -1,40 +1,64 @@
 #!/bin/bash
 # post-install.sh — ScyllaDB post-install for Day-0 and Day-1.
 #
-# Non-destructive invariant:
-#   - Existing Scylla data is protected state.
-#   - Post-install must never wipe existing data automatically.
-#   - Data wipe requires explicit dual confirmation flags.
+# Intent model:
+#   SCYLLA_INSTALL_INTENT=preserve (default)   — upgrade / restart; never touch existing data.
+#   SCYLLA_INSTALL_INTENT=fresh-join           — Day-1 node admission; stale Raft state must be cleared.
+#
+# Ownership model:
+#   After each successful install, a cluster fingerprint is written to
+#   /var/lib/globular/state/scylladb/ownership.json. On the next install,
+#   if the stored fingerprint matches the current cluster the data is ours →
+#   preserve. If it does not match (node rebuilt, new cluster) the data is
+#   stale → either wipe (with explicit intent) or fail closed.
+#
+# Safety gates for stale Raft wipe (ALL must be true):
+#   SCYLLA_INSTALL_INTENT=fresh-join
+#   ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true
+#
+# Legacy forced reinit (manual operator use — independent gate):
+#   FORCE_SCYLLA_REINIT=true
+#   I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED=true
 
 set -euo pipefail
 
 STATE_DIR="${STATE_DIR:-/var/lib/globular}"
 NODE_IP="${NODE_IP:-}"
-SCYLLA_DATA_DIR="/var/lib/scylla/data"
-SCYLLA_COMMITLOG_DIR="/var/lib/scylla/commitlog"
-SCYLLA_YAML="/etc/scylla/scylla.yaml"
+SCYLLA_BASE_DIR="${SCYLLA_BASE_DIR:-/var/lib/scylla}"
+SCYLLA_DATA_DIR="${SCYLLA_DATA_DIR:-${SCYLLA_BASE_DIR}/data}"
+SCYLLA_COMMITLOG_DIR="${SCYLLA_COMMITLOG_DIR:-${SCYLLA_BASE_DIR}/commitlog}"
+SCYLLA_HINTS_DIR="${SCYLLA_HINTS_DIR:-${SCYLLA_BASE_DIR}/hints}"
+SCYLLA_VIEW_HINTS_DIR="${SCYLLA_VIEW_HINTS_DIR:-${SCYLLA_BASE_DIR}/view_hints}"
+SCYLLA_ETC_DIR="${SCYLLA_ETC_DIR:-/etc/scylla}"
+SCYLLA_YAML="${SCYLLA_YAML:-${SCYLLA_ETC_DIR}/scylla.yaml}"
+
+SCYLLA_INSTALL_INTENT="${SCYLLA_INSTALL_INTENT:-preserve}"
+SCYLLA_CLUSTER_FINGERPRINT="${SCYLLA_CLUSTER_FINGERPRINT:-}"
+ALLOW_STALE_SCYLLA_REINIT_ON_JOIN="${ALLOW_STALE_SCYLLA_REINIT_ON_JOIN:-false}"
 
 FORCE_SCYLLA_REINIT="${FORCE_SCYLLA_REINIT:-false}"
 I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED="${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED:-false}"
 
-echo "[scylladb/post-install] Starting ScyllaDB post-install..."
+OWNERSHIP_DIR="${STATE_DIR}/state/scylladb"
+OWNERSHIP_FILE="${OWNERSHIP_DIR}/ownership.json"
 
-# 0) Fast exit if already healthy.
+echo "[scylladb/post-install] Starting ScyllaDB post-install (intent=${SCYLLA_INSTALL_INTENT})..."
+
+# ── 0) Fast exit if already healthy ──────────────────────────────────────────
 if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
     SCYLLA_IP=$(grep -oP "listen_address:\s*'\K[^']+" "${SCYLLA_YAML}" 2>/dev/null || echo "")
     if [[ -n "${SCYLLA_IP}" ]] && timeout 3 bash -c "echo >/dev/tcp/${SCYLLA_IP}/9042" 2>/dev/null; then
-        echo "[scylladb/post-install] ScyllaDB already serving CQL on ${SCYLLA_IP}:9042"
-        echo "[scylladb/post-install] Skipping reinstall to protect Raft cluster state"
+        echo "[scylladb/post-install] ScyllaDB already serving CQL on ${SCYLLA_IP}:9042 — skipping (Raft cluster state protected)"
         exit 0
     fi
-    echo "[scylladb/post-install] ScyllaDB active but not ready — proceeding non-destructively"
+    echo "[scylladb/post-install] ScyllaDB active but not ready — proceeding"
 fi
 
-# 0b) Stop before config changes.
+# ── 0b) Stop before config changes ───────────────────────────────────────────
 systemctl stop scylla-server.service 2>/dev/null || true
 echo "[scylladb/post-install] ScyllaDB stopped"
 
-# 1) Detect local IP.
+# ── 1) Detect local IP ───────────────────────────────────────────────────────
 if [[ -z "${NODE_IP}" ]]; then
     NODE_IP=$(ip route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
 fi
@@ -47,7 +71,7 @@ if [[ -z "${NODE_IP}" ]]; then
 fi
 echo "[scylladb/post-install] Node IP: ${NODE_IP}"
 
-# 2) Discover seed candidates from etcd endpoints.
+# ── 2) Discover seed candidates from etcd endpoints ──────────────────────────
 SEED_IP="${NODE_IP}"
 ETCD_ENDPOINTS="${STATE_DIR}/config/etcd_endpoints"
 if [[ -f "${ETCD_ENDPOINTS}" ]]; then
@@ -61,26 +85,8 @@ if [[ -f "${ETCD_ENDPOINTS}" ]]; then
 fi
 echo "[scylladb/post-install] Seeds: ${SEED_IP}"
 
-# 2b) Seed mismatch is advisory only (non-destructive).
-if [[ -f "${SCYLLA_YAML}" ]]; then
-    CURRENT_SEEDS=$(grep -A2 'seeds:' "${SCYLLA_YAML}" | grep -oP "seeds:\s*'\K[^']+" || echo "")
-    if [[ -n "${CURRENT_SEEDS}" && -n "${SEED_IP}" && "${CURRENT_SEEDS}" != *"${SEED_IP%%,*}"* ]]; then
-        echo "[scylladb/post-install] WARNING: Seeds mismatch detected (have: ${CURRENT_SEEDS}, need: ${SEED_IP})"
-        echo "[scylladb/post-install] Data will be preserved. Controller remediation required if node cannot join."
-        mkdir -p "${STATE_DIR}/state/scylladb"
-        cat > "${STATE_DIR}/state/scylladb/remediation-required.json" <<EOF_JSON
-{
-  "reason": "seed_mismatch",
-  "existing_seeds": "${CURRENT_SEEDS}",
-  "expected_seed": "${SEED_IP}",
-  "timestamp": "$(date -Iseconds)"
-}
-EOF_JSON
-    fi
-fi
-
-# 3) Copy TLS certificates.
-SCYLLA_TLS_DIR="/etc/scylla/tls"
+# ── 3) Copy TLS certificates ─────────────────────────────────────────────────
+SCYLLA_TLS_DIR="${SCYLLA_TLS_DIR:-${SCYLLA_ETC_DIR}/tls}"
 PKI_CERT_DIR="${STATE_DIR}/pki/issued/services"
 PKI_DIR="${STATE_DIR}/pki"
 
@@ -98,97 +104,151 @@ else
     echo "[scylladb/post-install] WARNING: PKI certs not found — TLS setup skipped"
 fi
 
-# 4) Non-destructive data handling + explicit forced reinit gate.
+# ── 4) Derive cluster fingerprint from CA cert if not supplied ───────────────
+if [[ -z "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
+    CA_CERT="${STATE_DIR}/pki/ca.crt"
+    if [[ -f "${CA_CERT}" ]]; then
+        SCYLLA_CLUSTER_FINGERPRINT=$(sha256sum "${CA_CERT}" | cut -c1-16)
+        echo "[scylladb/post-install] Derived cluster fingerprint: ${SCYLLA_CLUSTER_FINGERPRINT}"
+    else
+        echo "[scylladb/post-install] WARNING: CA cert not found — ownership comparison will be skipped"
+    fi
+fi
+
+# ── 4b) Auto-detect Day-1 join context from node-agent state when env not set ─
+# The node-agent writes join_id to state.json for the duration of an active
+# join and clears+saves it after completion. A non-empty join_id here means
+# this post-install is part of a live Day-1 join, not an upgrade.
+if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
+    STATE_JSON="${STATE_DIR}/nodeagent/state.json"
+    if [[ -f "${STATE_JSON}" ]]; then
+        JOIN_ID_VAL=$(grep -oP '"join_id"\s*:\s*"\K[^"]+' "${STATE_JSON}" 2>/dev/null || echo "")
+        if [[ -n "${JOIN_ID_VAL}" ]]; then
+            SCYLLA_INSTALL_INTENT="fresh-join"
+            ALLOW_STALE_SCYLLA_REINIT_ON_JOIN="true"
+            echo "[scylladb/post-install] Auto-detected Day-1 join context (join_id=${JOIN_ID_VAL})"
+        fi
+    fi
+fi
+
+# ── 5) Detect existing Raft/topology state ────────────────────────────────────
+# Only the specific system directories that encode cluster membership are
+# checked here. User keyspace data is NOT considered stale Raft state.
+SCYLLA_HAS_RAFT_STATE=false
 SCYLLA_HAS_EXISTING_DATA=false
+
 if [[ -d "${SCYLLA_DATA_DIR}/system" ]] || find "${SCYLLA_DATA_DIR}" -mindepth 1 -maxdepth 1 2>/dev/null | grep -q .; then
     SCYLLA_HAS_EXISTING_DATA=true
 fi
 
-# Detect Day-1 join context: node-agent sets join_id in state.json for the
-# duration of an active join and clears it (+ saves to disk) once the join
-# completes. A non-empty join_id means this post-install is running as part
-# of a fresh cluster join, not an in-place upgrade. Old Raft/topology data
-# from a previous cluster membership is always stale in this context and
-# must be wiped — it will block ScyllaDB from joining the new cluster's
-# Raft Group0 and cause an indefinite STARTING-mode hang.
-IS_DAY1_JOIN=false
-STATE_JSON="${STATE_DIR}/nodeagent/state.json"
-if [[ -f "${STATE_JSON}" ]]; then
-    JOIN_ID_VAL=$(grep -oP '"join_id"\s*:\s*"\K[^"]+' "${STATE_JSON}" 2>/dev/null || echo "")
-    if [[ -n "${JOIN_ID_VAL}" ]]; then
-        IS_DAY1_JOIN=true
-        echo "[scylladb/post-install] Day-1 join context detected (join_id=${JOIN_ID_VAL})"
-    fi
-fi
-
-# Secondary signal: seed mismatch means the node is joining a different
-# cluster than the one it was previously a member of.
-if [[ "${IS_DAY1_JOIN}" != "true" && -f "${SCYLLA_YAML}" ]]; then
-    CURRENT_SEEDS=$(grep -A2 'seeds:' "${SCYLLA_YAML}" | grep -oP "seeds:\s*'\K[^']+" 2>/dev/null || echo "")
-    NEW_SEED_HOST=$(echo "${SEED_IP}" | cut -d',' -f1)
-    if [[ -n "${CURRENT_SEEDS}" && -n "${NEW_SEED_HOST}" && "${CURRENT_SEEDS}" != *"${NEW_SEED_HOST}"* ]]; then
-        IS_DAY1_JOIN=true
-        echo "[scylladb/post-install] Seed mismatch detected (have: ${CURRENT_SEEDS}, need: ${SEED_IP}) — treating as Day-1 join"
-    fi
-fi
-
 if [[ "${SCYLLA_HAS_EXISTING_DATA}" == "true" ]]; then
-    echo "[scylladb/post-install] Existing ScyllaDB data detected under ${SCYLLA_DATA_DIR}"
-
-    if [[ "${IS_DAY1_JOIN}" == "true" ]]; then
-        # Stale Raft/topology data from a previous cluster epoch blocks the
-        # new join. The joining node has no user data in the new cluster yet,
-        # so wiping is always safe here.
-        echo "[scylladb/post-install] Wiping stale Raft/topology data for clean cluster join"
-        mkdir -p "${STATE_DIR}/audit"
-        echo "$(date -Iseconds) auto-wiped stale ScyllaDB data on $(hostname) for Day-1 join (join_id=${JOIN_ID_VAL:-seed_mismatch})" >> "${STATE_DIR}/audit/scylladb-reinit.log"
-        rm -rf /var/lib/scylla/data \
-               /var/lib/scylla/commitlog \
-               /var/lib/scylla/hints \
-               /var/lib/scylla/view_hints \
-               /var/lib/scylla/coredump
-        echo "[scylladb/post-install] Stale data wiped; node will join as a fresh member"
-        SCYLLA_HAS_EXISTING_DATA=false
-    elif [[ "${FORCE_SCYLLA_REINIT}" == "true" && "${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED}" == "true" ]]; then
-        echo "[scylladb/post-install] FORCE_SCYLLA_REINIT confirmed. This will destroy local ScyllaDB data."
-        if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
-            echo "[scylladb/post-install] ERROR: Refusing forced wipe while ScyllaDB is running" >&2
-            exit 1
+    for check_dir in \
+        "${SCYLLA_DATA_DIR}/system/topology-"* \
+        "${SCYLLA_DATA_DIR}/system/raft-"* \
+        "${SCYLLA_DATA_DIR}/system/raft_snapshot_config-"*; do
+        if [[ -d "${check_dir}" ]] && find "${check_dir}" -name "*.db" -maxdepth 2 2>/dev/null | grep -q .; then
+            SCYLLA_HAS_RAFT_STATE=true
+            break
         fi
+    done
+fi
 
-        mkdir -p "${STATE_DIR}/audit"
-        echo "$(date -Iseconds) forced ScyllaDB reinit on $(hostname) data_dir=${SCYLLA_DATA_DIR}" >> "${STATE_DIR}/audit/scylladb-reinit.log"
-
-        rm -rf /var/lib/scylla/data \
-               /var/lib/scylla/commitlog \
-               /var/lib/scylla/hints \
-               /var/lib/scylla/view_hints \
-               /var/lib/scylla/coredump
-        echo "[scylladb/post-install] Forced reinit wipe completed"
-    else
-        echo "[scylladb/post-install] Upgrade context — keeping existing data"
+# ── 6) Ownership check and stale Raft resolution ─────────────────────────────
+if [[ "${FORCE_SCYLLA_REINIT}" == "true" && "${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED}" == "true" ]]; then
+    # Legacy forced reinit — independent of ownership model.
+    if systemctl is-active --quiet scylla-server.service 2>/dev/null; then
+        echo "[scylladb/post-install] ERROR: Refusing forced wipe while ScyllaDB is running" >&2
+        exit 1
     fi
+    echo "[scylladb/post-install] FORCE_SCYLLA_REINIT confirmed — wiping all ScyllaDB data"
+    mkdir -p "${STATE_DIR}/audit"
+    echo "$(date -Iseconds) forced ScyllaDB reinit on $(hostname) data_dir=${SCYLLA_DATA_DIR}" >> "${STATE_DIR}/audit/scylladb-reinit.log"
+    rm -rf "${SCYLLA_DATA_DIR}" \
+           "${SCYLLA_COMMITLOG_DIR}" \
+           "${SCYLLA_HINTS_DIR}" \
+           "${SCYLLA_VIEW_HINTS_DIR}" \
+           "${SCYLLA_BASE_DIR}/coredump"
+    echo "[scylladb/post-install] Forced reinit wipe completed"
+    SCYLLA_HAS_EXISTING_DATA=false
+    SCYLLA_HAS_RAFT_STATE=false
+
+elif [[ "${SCYLLA_HAS_RAFT_STATE}" == "true" ]]; then
+    # Existing Raft/topology state — check ownership.
+    OWNS_DATA=false
+    STORED_FP=""
+    if [[ -f "${OWNERSHIP_FILE}" && -n "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
+        STORED_FP=$(grep -oP '"cluster_fingerprint"\s*:\s*"\K[^"]+' "${OWNERSHIP_FILE}" 2>/dev/null || echo "")
+        if [[ "${STORED_FP}" == "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
+            OWNS_DATA=true
+        fi
+    fi
+
+    if [[ "${OWNS_DATA}" == "true" ]]; then
+        echo "[scylladb/post-install] Ownership marker matches current cluster — preserving Raft state (upgrade path)"
+
+    elif [[ "${SCYLLA_INSTALL_INTENT}" == "fresh-join" && "${ALLOW_STALE_SCYLLA_REINIT_ON_JOIN}" == "true" ]]; then
+        # Stale Raft data from a different cluster epoch — safe to wipe for join.
+        # Wipe only the system Raft/topology tables and commitlog; preserve any
+        # user keyspace directories for future-proofing.
+        echo "[scylladb/post-install] Stale Raft/topology state detected (stored_fp=${STORED_FP:-none}, current_fp=${SCYLLA_CLUSTER_FINGERPRINT}) — wiping for fresh join"
+        mkdir -p "${STATE_DIR}/audit"
+        echo "$(date -Iseconds) auto-wiped stale ScyllaDB Raft state on $(hostname) for Day-1 join (intent=${SCYLLA_INSTALL_INTENT})" >> "${STATE_DIR}/audit/scylladb-reinit.log"
+
+        # Remove system Raft/topology SSTables only.
+        find "${SCYLLA_DATA_DIR}/system" -maxdepth 1 -type d \( \
+            -name 'topology-*' \
+            -o -name 'raft-*' \
+            -o -name 'raft_snapshot_config-*' \
+            -o -name 'group0_history-*' \
+        \) 2>/dev/null | xargs rm -rf 2>/dev/null || true
+        rm -rf "${SCYLLA_COMMITLOG_DIR}" \
+               "${SCYLLA_HINTS_DIR}" \
+               "${SCYLLA_VIEW_HINTS_DIR}"
+        echo "[scylladb/post-install] Stale Raft/topology state wiped; user keyspace data preserved"
+        SCYLLA_HAS_RAFT_STATE=false
+
+    else
+        # FAIL CLOSED — never start Scylla with unknown stale Raft state.
+        echo "[scylladb/post-install] ERROR: Stale Raft/topology state exists for a different cluster." >&2
+        echo "[scylladb/post-install]   stored_fp=${STORED_FP:-none}  current_fp=${SCYLLA_CLUSTER_FINGERPRINT}" >&2
+        echo "[scylladb/post-install]   To resolve: set SCYLLA_INSTALL_INTENT=fresh-join and ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true" >&2
+        mkdir -p "${OWNERSHIP_DIR}"
+        cat > "${OWNERSHIP_DIR}/remediation-required.json" <<EOF_REMEDIATE
+{
+  "reason": "stale_raft_topology_state",
+  "detected_at": "$(date -Iseconds)",
+  "node_hostname": "$(hostname)",
+  "node_ip": "${NODE_IP}",
+  "cluster_fingerprint_stored": "${STORED_FP:-unknown}",
+  "cluster_fingerprint_current": "${SCYLLA_CLUSTER_FINGERPRINT}",
+  "action_required": "Set SCYLLA_INSTALL_INTENT=fresh-join and ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true, then rerun post-install"
+}
+EOF_REMEDIATE
+        exit 1
+    fi
+
+elif [[ "${SCYLLA_HAS_EXISTING_DATA}" == "true" ]]; then
+    echo "[scylladb/post-install] Existing ScyllaDB data (no Raft state detected) — preserving"
 else
-    echo "[scylladb/post-install] No existing ScyllaDB data detected; initializing data directories"
+    echo "[scylladb/post-install] No existing ScyllaDB data; initializing data directories"
 fi
 
 mkdir -p "${SCYLLA_DATA_DIR}" "${SCYLLA_COMMITLOG_DIR}"
-chown -R scylla:scylla /var/lib/scylla 2>/dev/null || true
+chown -R scylla:scylla "${SCYLLA_BASE_DIR}" 2>/dev/null || true
 
-# Ensure /var/lib/scylla/conf -> /etc/scylla symlink.
-SCYLLA_DATA_CONF="/var/lib/scylla/conf"
+# Ensure $SCYLLA_BASE_DIR/conf -> $SCYLLA_ETC_DIR symlink.
+SCYLLA_DATA_CONF="${SCYLLA_BASE_DIR}/conf"
 if [[ -L "${SCYLLA_DATA_CONF}" ]]; then
     :
 elif [[ -d "${SCYLLA_DATA_CONF}" ]]; then
-    ln -sf /etc/scylla/scylla.yaml "${SCYLLA_DATA_CONF}/scylla.yaml"
+    ln -sf "${SCYLLA_YAML}" "${SCYLLA_DATA_CONF}/scylla.yaml"
 else
-    ln -sfn /etc/scylla "${SCYLLA_DATA_CONF}"
+    ln -sfn "${SCYLLA_ETC_DIR}" "${SCYLLA_DATA_CONF}"
 fi
 
-# 5) Write safe default scylla.yaml if absent, on forced reinit, or on Day-1 join
-# (seeds must be correct for the new cluster regardless of what the old yaml said).
-mkdir -p /etc/scylla
-if [[ ! -f "${SCYLLA_YAML}" || "${FORCE_SCYLLA_REINIT}" == "true" || "${IS_DAY1_JOIN}" == "true" ]]; then
+# ── 7) Write scylla.yaml if absent, forced reinit, or fresh-join ─────────────
+mkdir -p "${SCYLLA_ETC_DIR}"
+if [[ ! -f "${SCYLLA_YAML}" || "${FORCE_SCYLLA_REINIT}" == "true" || "${SCYLLA_INSTALL_INTENT}" == "fresh-join" ]]; then
     echo "[scylladb/post-install] Writing scylla.yaml (seeds: ${SEED_IP}, listen: ${NODE_IP})"
     cat > "${SCYLLA_YAML}" <<EOF_SCYLLA
 # Generated by Globular post-install — do not edit manually.
@@ -210,17 +270,17 @@ developer_mode: true
 
 client_encryption_options:
   enabled: true
-  certificate: /etc/scylla/tls/server.crt
-  keyfile: /etc/scylla/tls/server.key
-  truststore: /etc/scylla/tls/ca.crt
+  certificate: ${SCYLLA_ETC_DIR}/tls/server.crt
+  keyfile: ${SCYLLA_ETC_DIR}/tls/server.key
+  truststore: ${SCYLLA_ETC_DIR}/tls/ca.crt
   require_client_auth: false
 
 native_transport_port_ssl: 9142
 
 data_file_directories:
-  - /var/lib/scylla/data
+  - ${SCYLLA_DATA_DIR}
 
-commitlog_directory: /var/lib/scylla/commitlog
+commitlog_directory: ${SCYLLA_COMMITLOG_DIR}
 commitlog_sync: batch
 commitlog_sync_batch_window_in_ms: 2
 commitlog_sync_period_in_ms: 10000
@@ -236,47 +296,49 @@ else
     echo "[scylladb/post-install] Existing scylla.yaml preserved"
 fi
 
-# 6) Environment/sysconfig.
+# ── 8) Environment/sysconfig ──────────────────────────────────────────────────
+SCYLLA_SYSCONF_DIR="${SCYLLA_SYSCONF_DIR:-/etc/default}"
+SCYLLA_CONFD_DIR="${SCYLLA_CONFD_DIR:-/etc/scylla.d}"
+
 if [[ -f /etc/os-release ]]; then
     . /etc/os-release
 fi
 
 case "${ID:-}${ID_LIKE:-}" in
-    *debian*|*ubuntu*) SCYLLA_ENV_FILE="/etc/default/scylla-server" ;;
-    *rhel*|*centos*|*fedora*) SCYLLA_ENV_FILE="/etc/sysconfig/scylla-server" ;;
-    *) SCYLLA_ENV_FILE="/etc/default/scylla-server" ;;
+    *rhel*|*centos*|*fedora*) SCYLLA_ENV_FILE="${SCYLLA_SYSCONF_DIR}/scylla-server" ;;
+    *) SCYLLA_ENV_FILE="${SCYLLA_SYSCONF_DIR}/scylla-server" ;;
 esac
 
 if [[ ! -f "${SCYLLA_ENV_FILE}" ]]; then
     mkdir -p "$(dirname "${SCYLLA_ENV_FILE}")"
-    cat > "${SCYLLA_ENV_FILE}" <<'ENVEOF'
+    cat > "${SCYLLA_ENV_FILE}" <<ENVEOF
 NETWORK_MODE=posix
 SET_NIC_AND_DISKS=no
 SET_CLOCKSOURCE=no
 NR_HUGEPAGES=64
 USER=scylla
 GROUP=scylla
-SCYLLA_HOME=/var/lib/scylla
-SCYLLA_CONF=/etc/scylla
+SCYLLA_HOME=${SCYLLA_BASE_DIR}
+SCYLLA_CONF=${SCYLLA_ETC_DIR}
 SCYLLA_ARGS="--log-to-syslog 1 --log-to-stdout 0 --default-log-level info --network-stack posix"
 ENVEOF
 fi
 
-mkdir -p /etc/scylla.d
-[[ -f /etc/scylla.d/dev-mode.conf ]] || echo "DEV_MODE=--developer-mode=1" > /etc/scylla.d/dev-mode.conf
-[[ -f /etc/scylla.d/memory.conf ]] || echo "# memory.conf" > /etc/scylla.d/memory.conf
-[[ -f /etc/scylla.d/io.conf ]] || echo "# io.conf" > /etc/scylla.d/io.conf
-[[ -f /etc/scylla.d/cpuset.conf ]] || echo "# cpuset.conf" > /etc/scylla.d/cpuset.conf
+mkdir -p "${SCYLLA_CONFD_DIR}"
+[[ -f "${SCYLLA_CONFD_DIR}/dev-mode.conf" ]] || echo "DEV_MODE=--developer-mode=1" > "${SCYLLA_CONFD_DIR}/dev-mode.conf"
+[[ -f "${SCYLLA_CONFD_DIR}/memory.conf" ]] || echo "# memory.conf" > "${SCYLLA_CONFD_DIR}/memory.conf"
+[[ -f "${SCYLLA_CONFD_DIR}/io.conf" ]] || echo "# io.conf" > "${SCYLLA_CONFD_DIR}/io.conf"
+[[ -f "${SCYLLA_CONFD_DIR}/cpuset.conf" ]] || echo "# cpuset.conf" > "${SCYLLA_CONFD_DIR}/cpuset.conf"
 
-# 7) Systemd overrides.
-SCYLLA_OVERRIDE_DIR="/etc/systemd/system/scylla-server.service.d"
+# ── 9) Systemd overrides ──────────────────────────────────────────────────────
+SCYLLA_OVERRIDE_DIR="${SCYLLA_OVERRIDE_DIR:-/etc/systemd/system/scylla-server.service.d}"
 mkdir -p "${SCYLLA_OVERRIDE_DIR}"
 
 cat > "${SCYLLA_OVERRIDE_DIR}/sysconfdir.conf" <<EOF_SYSCONF
 [Service]
 EnvironmentFile=
 EnvironmentFile=-${SCYLLA_ENV_FILE}
-EnvironmentFile=-/etc/scylla.d/*.conf
+EnvironmentFile=-${SCYLLA_CONFD_DIR}/*.conf
 EOF_SYSCONF
 
 if [[ ! -f "${SCYLLA_OVERRIDE_DIR}/dependencies.conf" ]]; then
@@ -290,12 +352,22 @@ fi
 systemctl daemon-reload
 echo "[scylladb/post-install] Systemd overrides installed"
 
-# 8) Start ScyllaDB.
-echo "[scylladb/post-install] Starting ScyllaDB (non-destructive path, seeds: ${SEED_IP})..."
+# ── 10) Write ownership marker ────────────────────────────────────────────────
+mkdir -p "${OWNERSHIP_DIR}"
+cat > "${OWNERSHIP_FILE}" <<EOF_OWNER
+{
+  "cluster_fingerprint": "${SCYLLA_CLUSTER_FINGERPRINT}",
+  "node_ip": "${NODE_IP}",
+  "recorded_at": "$(date -Iseconds)"
+}
+EOF_OWNER
+echo "[scylladb/post-install] Ownership marker written (fingerprint=${SCYLLA_CLUSTER_FINGERPRINT})"
+
+# ── 11) Start ScyllaDB ────────────────────────────────────────────────────────
+echo "[scylladb/post-install] Starting ScyllaDB (seeds: ${SEED_IP})..."
 systemctl enable scylla-server.service 2>/dev/null || true
 systemctl start scylla-server.service || true
 
-# 9) Readiness is checked by workflow.
 echo "[scylladb/post-install] ScyllaDB started (join may still be in progress)"
 echo "[scylladb/post-install] Port 9042 readiness will be checked by the workflow engine"
 echo "[scylladb/post-install] ScyllaDB post-install complete (listen: ${NODE_IP}, seeds: ${SEED_IP})"
