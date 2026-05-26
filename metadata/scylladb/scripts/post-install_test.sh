@@ -169,6 +169,13 @@ assert_file_contains() {
     fi
 }
 
+# ── Inject a remote peer into etcd_endpoints ────────────────────────────────
+# Simulates a node that has a cluster peer (non-first-node Day-1 join).
+inject_remote_seed() {
+    local peer_ip="${1:-10.0.0.1}"
+    echo "https://${peer_ip}:2379" > "${TMP_ROOT}/config/etcd_endpoints"
+}
+
 # ── Compute current cluster fingerprint (same logic as the script) ────────────
 cluster_fp() {
     sha256sum "${TMP_ROOT}/pki/ca.crt" | cut -c1-16
@@ -204,14 +211,19 @@ create_raft_state() {
 # TEST 1: Clean node — no prior data — starts successfully and writes ownership.
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "Test 1: Clean node starts and writes ownership marker"
+echo "Test 1: Clean node starts and writes ownership marker (first-node bootstrap)"
 setup
-rc=0; output=$(run_script "SCYLLA_INSTALL_INTENT=fresh-join" \
-                    "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true") || rc=$?
+# First-node bootstrap: fresh-join intent, no remote seeds → needs SCYLLA_BOOTSTRAP_INTENT=first-node.
+rc=0; output=$(run_script \
+    "SCYLLA_INSTALL_INTENT=fresh-join" \
+    "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true" \
+    "SCYLLA_BOOTSTRAP_INTENT=first-node") || rc=$?
 assert_exit "clean-node exits 0" 0 "${rc}" "${output}"
 assert_file_exists "ownership.json written" "${TMP_ROOT}/state/scylladb/ownership.json"
 assert_file_contains "ownership.json has fingerprint" \
     "${TMP_ROOT}/state/scylladb/ownership.json" "cluster_fingerprint"
+assert_file_contains "ownership.json has source field" \
+    "${TMP_ROOT}/state/scylladb/ownership.json" "scylladb-post-install"
 teardown
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -262,6 +274,7 @@ echo "Test 4: Stale Raft state with fresh-join intent — Raft dirs wiped, user 
 setup
 create_raft_state
 write_ownership "stale0000fingerprint"
+inject_remote_seed "10.0.0.1"   # simulate joining an existing cluster
 rc=0; output=$(run_script \
     "SCYLLA_INSTALL_INTENT=fresh-join" \
     "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true") || rc=$?
@@ -289,6 +302,7 @@ echo "Test 5: Auto-detect Day-1 join from state.json join_id"
 setup
 create_raft_state
 write_ownership "stale0000fingerprint"
+inject_remote_seed "10.0.0.1"
 # Inject a non-empty join_id (simulates an active Day-1 join).
 cat > "${TMP_ROOT}/nodeagent/state.json" <<JSON
 {"join_id": "abc-123-def-456", "node_id": "test-node-01"}
@@ -336,6 +350,47 @@ assert_exit "forced reinit exits 0" 0 "${rc}" "${output}"
 # All data dirs wiped, including user keyspace.
 assert_dir_absent "data dir wiped" "${TMP_ROOT}/scylla/data/system/topology-abc123"
 assert_dir_absent "raft dir wiped" "${TMP_ROOT}/scylla/data/system/raft-def456"
+teardown
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 8: Fresh-join with no etcd_endpoints file → fails closed (no remote seed).
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "Test 8: Fresh-join with missing etcd_endpoints — fails closed (no remote seed)"
+setup
+# No etcd_endpoints file — SEED_IP will be self-only.
+rc=0; output=$(run_script \
+    "SCYLLA_INSTALL_INTENT=fresh-join" \
+    "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true") || rc=$?
+assert_exit "missing-seed exits non-zero" 1 "${rc}" "${output}"
+teardown
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 9: Fresh-join with self-only seed in etcd_endpoints → fails closed.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "Test 9: Fresh-join with self-only seed — fails closed"
+setup
+# etcd_endpoints contains only self (10.1.2.3 == NODE_IP).
+echo "https://10.1.2.3:2379" > "${TMP_ROOT}/config/etcd_endpoints"
+rc=0; output=$(run_script \
+    "SCYLLA_INSTALL_INTENT=fresh-join" \
+    "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true") || rc=$?
+assert_exit "self-only-seed exits non-zero" 1 "${rc}" "${output}"
+teardown
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 10: First-node bootstrap — self seed allowed with SCYLLA_BOOTSTRAP_INTENT=first-node.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "Test 10: First-node bootstrap — self-only seed allowed with bootstrap intent"
+setup
+# No remote peers — this is the cluster founder.
+rc=0; output=$(run_script \
+    "SCYLLA_INSTALL_INTENT=fresh-join" \
+    "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true" \
+    "SCYLLA_BOOTSTRAP_INTENT=first-node") || rc=$?
+assert_exit "bootstrap-intent exits 0" 0 "${rc}" "${output}"
 teardown
 
 # ─────────────────────────────────────────────────────────────────────────────

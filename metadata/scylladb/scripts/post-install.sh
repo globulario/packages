@@ -35,6 +35,9 @@ SCYLLA_YAML="${SCYLLA_YAML:-${SCYLLA_ETC_DIR}/scylla.yaml}"
 SCYLLA_INSTALL_INTENT="${SCYLLA_INSTALL_INTENT:-preserve}"
 SCYLLA_CLUSTER_FINGERPRINT="${SCYLLA_CLUSTER_FINGERPRINT:-}"
 ALLOW_STALE_SCYLLA_REINIT_ON_JOIN="${ALLOW_STALE_SCYLLA_REINIT_ON_JOIN:-false}"
+# Set to "first-node" when bootstrapping the first node of a new cluster.
+# Allows self-only seed on fresh-join (normal join requires ≥1 non-self seed).
+SCYLLA_BOOTSTRAP_INTENT="${SCYLLA_BOOTSTRAP_INTENT:-}"
 
 FORCE_SCYLLA_REINIT="${FORCE_SCYLLA_REINIT:-false}"
 I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED="${I_UNDERSTAND_SCYLLA_DATA_WILL_BE_DESTROYED:-false}"
@@ -84,6 +87,36 @@ if [[ -f "${ETCD_ENDPOINTS}" ]]; then
     done < "${ETCD_ENDPOINTS}"
 fi
 echo "[scylladb/post-install] Seeds: ${SEED_IP}"
+
+# ── 2b) Validate seed context for fresh-join ─────────────────────────────────
+# Scylla may create a standalone local Raft/topology identity if started with
+# only itself as a seed while joining an existing cluster. Prevent this by
+# requiring at least one non-self, non-localhost seed unless this node is
+# explicitly bootstrapping a new cluster (SCYLLA_BOOTSTRAP_INTENT=first-node).
+if [[ "${SCYLLA_INSTALL_INTENT}" == "fresh-join" ]]; then
+    HAS_REMOTE_SEED=false
+    IFS=',' read -ra _SEEDS <<< "${SEED_IP}"
+    for _seed in "${_SEEDS[@]}"; do
+        _seed=$(echo "${_seed}" | xargs)
+        if [[ -n "${_seed}" && "${_seed}" != "127.0.0.1" && "${_seed}" != "localhost" && "${_seed}" != "${NODE_IP}" ]]; then
+            HAS_REMOTE_SEED=true
+            break
+        fi
+    done
+
+    if [[ "${HAS_REMOTE_SEED}" != "true" && "${SCYLLA_BOOTSTRAP_INTENT}" != "first-node" ]]; then
+        echo "[scylladb/post-install] ERROR: Day-1 fresh-join requires ≥1 non-self seed." >&2
+        echo "[scylladb/post-install]   Seeds found: ${SEED_IP:-none}" >&2
+        echo "[scylladb/post-install]   etcd_endpoints file: ${ETCD_ENDPOINTS}" >&2
+        echo "[scylladb/post-install]   If this is the first node of a new cluster, set SCYLLA_BOOTSTRAP_INTENT=first-node" >&2
+        echo "[scylladb/post-install]   If this is a joining node, ensure etcd_endpoints contains at least one peer IP" >&2
+        exit 1
+    fi
+
+    if [[ "${HAS_REMOTE_SEED}" != "true" && "${SCYLLA_BOOTSTRAP_INTENT}" == "first-node" ]]; then
+        echo "[scylladb/post-install] Bootstrap intent=first-node — self-only seed allowed for cluster initialization"
+    fi
+fi
 
 # ── 3) Copy TLS certificates ─────────────────────────────────────────────────
 SCYLLA_TLS_DIR="${SCYLLA_TLS_DIR:-${SCYLLA_ETC_DIR}/tls}"
@@ -352,21 +385,34 @@ fi
 systemctl daemon-reload
 echo "[scylladb/post-install] Systemd overrides installed"
 
-# ── 10) Write ownership marker ────────────────────────────────────────────────
-mkdir -p "${OWNERSHIP_DIR}"
-cat > "${OWNERSHIP_FILE}" <<EOF_OWNER
+# ── 10) Start ScyllaDB ────────────────────────────────────────────────────────
+echo "[scylladb/post-install] Starting ScyllaDB (seeds: ${SEED_IP})..."
+systemctl enable scylla-server.service 2>/dev/null || true
+_SCYLLA_START_OK=false
+if systemctl start scylla-server.service 2>/dev/null; then
+    _SCYLLA_START_OK=true
+else
+    echo "[scylladb/post-install] WARNING: systemctl start scylla-server returned non-zero — service may still be initializing"
+fi
+
+# ── 11) Write ownership marker ────────────────────────────────────────────────
+# Written only after a successful start so we never record ownership for a
+# configuration that failed to launch. If start fails, the next post-install
+# run will re-evaluate intent and data state from scratch.
+if [[ "${_SCYLLA_START_OK}" == "true" && -n "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
+    mkdir -p "${OWNERSHIP_DIR}"
+    cat > "${OWNERSHIP_FILE}" <<EOF_OWNER
 {
   "cluster_fingerprint": "${SCYLLA_CLUSTER_FINGERPRINT}",
   "node_ip": "${NODE_IP}",
+  "source": "scylladb-post-install",
   "recorded_at": "$(date -Iseconds)"
 }
 EOF_OWNER
-echo "[scylladb/post-install] Ownership marker written (fingerprint=${SCYLLA_CLUSTER_FINGERPRINT})"
-
-# ── 11) Start ScyllaDB ────────────────────────────────────────────────────────
-echo "[scylladb/post-install] Starting ScyllaDB (seeds: ${SEED_IP})..."
-systemctl enable scylla-server.service 2>/dev/null || true
-systemctl start scylla-server.service || true
+    echo "[scylladb/post-install] Ownership marker written (fingerprint=${SCYLLA_CLUSTER_FINGERPRINT})"
+elif [[ -z "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
+    echo "[scylladb/post-install] WARNING: no cluster fingerprint available — ownership marker not written"
+fi
 
 echo "[scylladb/post-install] ScyllaDB started (join may still be in progress)"
 echo "[scylladb/post-install] Port 9042 readiness will be checked by the workflow engine"
