@@ -270,7 +270,7 @@ teardown
 #         user keyspace preserved.
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "Test 4: Stale Raft state with fresh-join intent — Raft dirs wiped, user data preserved"
+echo "Test 4: Stale state (ownership mismatch) with fresh-join intent — ALL Scylla state wiped"
 setup
 create_raft_state
 write_ownership "stale0000fingerprint"
@@ -279,16 +279,14 @@ rc=0; output=$(run_script \
     "SCYLLA_INSTALL_INTENT=fresh-join" \
     "ALLOW_STALE_SCYLLA_REINIT_ON_JOIN=true") || rc=$?
 assert_exit "fresh-join exits 0" 0 "${rc}" "${output}"
-# Raft dirs must be gone.
+# data/ and commitlog/ are recreated empty by post-install — assert their
+# prior contents (user keyspace, Raft dirs) are gone.
+assert_dir_absent "user keyspace wiped" \
+    "${TMP_ROOT}/scylla/data/my_keyspace"
 assert_dir_absent "topology dir wiped" \
     "${TMP_ROOT}/scylla/data/system/topology-abc123"
 assert_dir_absent "raft dir wiped" \
     "${TMP_ROOT}/scylla/data/system/raft-def456"
-assert_dir_absent "raft_snapshot_config dir wiped" \
-    "${TMP_ROOT}/scylla/data/system/raft_snapshot_config-ghi789"
-# User keyspace must survive.
-assert_dir_exists "user keyspace preserved" \
-    "${TMP_ROOT}/scylla/data/my_keyspace"
 # New ownership marker must match current cluster.
 assert_file_contains "ownership updated to current fp" \
     "${TMP_ROOT}/state/scylladb/ownership.json" "$(cluster_fp)"

@@ -220,24 +220,22 @@ elif [[ "${SCYLLA_HAS_RAFT_STATE}" == "true" ]]; then
         echo "[scylladb/post-install] Ownership marker matches current cluster — preserving Raft state (upgrade path)"
 
     elif [[ "${SCYLLA_INSTALL_INTENT}" == "fresh-join" && "${ALLOW_STALE_SCYLLA_REINIT_ON_JOIN}" == "true" ]]; then
-        # Stale Raft data from a different cluster epoch — safe to wipe for join.
-        # Wipe only the system Raft/topology tables and commitlog; preserve any
-        # user keyspace directories for future-proofing.
-        echo "[scylladb/post-install] Stale Raft/topology state detected (stored_fp=${STORED_FP:-none}, current_fp=${SCYLLA_CLUSTER_FINGERPRINT}) — wiping for fresh join"
+        # Day-1 node admission with an ownership mismatch: the local data belongs
+        # to an unknown cluster epoch. Wipe ALL Scylla state — data dir, commitlog,
+        # hints, view_hints. Partial preservation is not safe here because system
+        # table state outside the explicitly named Raft dirs may carry hidden
+        # cluster identity that causes a split topology or ring poisoning.
+        echo "[scylladb/post-install] Stale state from unknown cluster epoch (stored_fp=${STORED_FP:-none}, current_fp=${SCYLLA_CLUSTER_FINGERPRINT}) — wiping all Scylla state for fresh join"
         mkdir -p "${STATE_DIR}/audit"
-        echo "$(date -Iseconds) auto-wiped stale ScyllaDB Raft state on $(hostname) for Day-1 join (intent=${SCYLLA_INSTALL_INTENT})" >> "${STATE_DIR}/audit/scylladb-reinit.log"
+        echo "$(date -Iseconds) wiped all ScyllaDB state on $(hostname) for Day-1 join (intent=${SCYLLA_INSTALL_INTENT})" >> "${STATE_DIR}/audit/scylladb-reinit.log"
 
-        # Remove system Raft/topology SSTables only.
-        find "${SCYLLA_DATA_DIR}/system" -maxdepth 1 -type d \( \
-            -name 'topology-*' \
-            -o -name 'raft-*' \
-            -o -name 'raft_snapshot_config-*' \
-            -o -name 'group0_history-*' \
-        \) 2>/dev/null | xargs rm -rf 2>/dev/null || true
-        rm -rf "${SCYLLA_COMMITLOG_DIR}" \
+        rm -rf "${SCYLLA_DATA_DIR}" \
+               "${SCYLLA_COMMITLOG_DIR}" \
                "${SCYLLA_HINTS_DIR}" \
-               "${SCYLLA_VIEW_HINTS_DIR}"
-        echo "[scylladb/post-install] Stale Raft/topology state wiped; user keyspace data preserved"
+               "${SCYLLA_VIEW_HINTS_DIR}" \
+               "${SCYLLA_BASE_DIR}/coredump"
+        echo "[scylladb/post-install] All Scylla state wiped"
+        SCYLLA_HAS_EXISTING_DATA=false
         SCYLLA_HAS_RAFT_STATE=false
 
     else
