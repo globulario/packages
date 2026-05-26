@@ -1,0 +1,29 @@
+id: remediation.must_go_through_workflow
+level: principle
+title: Remediation is a workflow, not a hidden command
+intent: Self-healing actions must be resolved, assessed, approved/executed, and verified through the same workflow and audit model as other cluster mutations.
+agent_guidance: Do not add healer shortcuts that run commands directly from diagnosis code. Create remediation actions and execute through workflow contracts.
+bad_smells:
+- doctor directly mutates service state
+- healer shells into node without workflow
+- auto-fix has no approval/receipt
+- repair skips verify phase
+activation_triggers:
+- remediation
+- self-healing
+- doctor
+- repair
+- auto-heal
+- ExecuteRemediation
+expressed_by:
+- operators/cluster-doctor.md
+- operators/cluster-self-healing.md
+- awareness/remediation_contracts.yaml
+related_invariants: []
+zooms_out_to:
+- workflow.source_of_operational_truth
+zooms_in_to:
+- doctor.findings_are_operator_language
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

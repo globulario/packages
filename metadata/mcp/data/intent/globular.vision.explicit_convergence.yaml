@@ -1,0 +1,30 @@
+id: globular.vision.explicit_convergence
+level: vision
+title: Globular favors explicit convergence over hidden magic
+intent: The system should make desired state, execution, drift, degradation, and recovery visible as first-class objects rather than hiding them in implicit loops or scripts.
+agent_guidance: When proposing architecture, prefer explicit state, receipts, findings, and workflows over hidden side effects.
+bad_smells:
+- implicit reconciliation with no receipts
+- operator cannot explain current state
+- side effect outside declared model
+- state transition not represented
+activation_triggers:
+- convergence
+- architecture
+- design
+- state machine
+- operator visibility
+expressed_by:
+- operators/convergence-model.md
+- operators/architecture-overview.md
+- operators/deployment-philosophy.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- state.repository_desired_installed_runtime
+- workflow.source_of_operational_truth
+- degraded_is_explicit_not_hidden
+related_to:
+- audit.every_authority_change_is_explainable
+status: extracted_candidate

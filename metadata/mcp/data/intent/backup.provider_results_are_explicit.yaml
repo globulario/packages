@@ -1,0 +1,26 @@
+id: backup.provider_results_are_explicit
+level: mechanism
+title: Backup provider results are explicit and composable
+intent: Cluster backup spans etcd, Scylla, filesystem/restic, objectstore, and service hooks. Each provider result must be visible rather than collapsed into one boolean.
+agent_guidance: Expose per-provider status, errors, durations, hashes/revisions, replication status, and quality labels.
+bad_smells:
+- backup job has only success bool
+- provider failure hidden by overall success
+- missing snapshot hash/revision
+- replication result not tracked
+activation_triggers:
+- backup provider
+- snapshot hash
+- per-provider status
+- replication
+- quality label
+expressed_by:
+- operators/backup-and-restore.md
+- developers/workflow-integration.md
+related_invariants: []
+zooms_out_to:
+- backup.must_be_restorable_not_just_taken
+zooms_in_to: []
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

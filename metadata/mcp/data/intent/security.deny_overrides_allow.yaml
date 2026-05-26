@@ -1,0 +1,28 @@
+id: security.deny_overrides_allow
+level: principle
+title: Deny overrides allow in RBAC
+intent: Authorization must be conservative. Explicit deny wins over broad allow so permissions cannot accidentally expand through group or role composition.
+agent_guidance: When changing RBAC matching, preserve deny precedence and audit the final decision path.
+bad_smells:
+- allow checked before deny and returns early
+- deny ignored for owner
+- role aggregation expands privilege silently
+- permission decision lacks audit
+activation_triggers:
+- RBAC
+- deny
+- allow
+- permission
+- authorization
+- role binding
+expressed_by:
+- operators/security.md
+- operators/rbac-permissions.md
+related_invariants: []
+zooms_out_to:
+- globular.security.ceremony_over_configuration
+zooms_in_to:
+- audit.every_authority_change_is_explainable
+related_to:
+- bootstrap.window_is_not_steady_state_auth
+status: extracted_candidate

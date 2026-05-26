@@ -1,0 +1,27 @@
+id: knowledge.promote_incidents_into_graph
+level: pattern
+title: Incidents become reusable knowledge
+intent: Failure discoveries should be captured as decisions, failure modes, forbidden fixes, tests, and eventually promoted into the graph so agents do not relearn the same lesson.
+agent_guidance: After a fix, add or update knowledge artifacts when the failure teaches a reusable architectural rule.
+bad_smells:
+- same failure recurs with no graph update
+- fix lacks failure mode entry
+- proposal queue ignored
+- lesson remains only in chat
+activation_triggers:
+- incident
+- proposal
+- promote
+- failure mode
+- learning loop
+expressed_by:
+- awareness/proposal_queue.md
+- awareness/container_training_loop.md
+- awareness/daily_workflow.md
+related_invariants: []
+zooms_out_to:
+- awareness.graph_is_compiled_context_not_authority
+zooms_in_to: []
+related_to:
+- doctor.findings_are_operator_language
+status: extracted_candidate

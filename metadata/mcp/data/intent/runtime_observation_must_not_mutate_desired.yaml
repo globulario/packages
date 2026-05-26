@@ -1,0 +1,27 @@
+id: runtime_observation_must_not_mutate_desired
+level: principle
+title: Runtime observation must not become desired authority
+intent: Heartbeats and runtime probes describe what is observed, not what should be true. Desired state belongs to the controller’s authority path.
+agent_guidance: If runtime disagrees with desired, report drift or trigger workflow. Do not rewrite desired state from runtime observation.
+bad_smells:
+- heartbeat writes desired state
+- runtime health changes desired target
+- node-agent decides cluster desired state
+- observation repairs authority directly
+activation_triggers:
+- heartbeat
+- runtime observation
+- desired state
+- drift
+- node-agent writes desired
+expressed_by:
+- awareness/decisions/runtime-observation-is-not-desired-authority.md
+- awareness/authority_rules.yaml
+related_invariants:
+- infra.heartbeat_not_desired_authority
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to: []
+related_to:
+- installed_state.owned_by_node_agent
+status: extracted_candidate

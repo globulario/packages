@@ -1,0 +1,27 @@
+id: install.result_requires_durable_commit
+level: mechanism
+title: Install result must cross a persistence barrier
+intent: Install or state changes that affect control flow must be persisted before side effects, success reports, or follow-up actions occur.
+agent_guidance: Update state, persist it, check the error, then trigger side effects. Never launch goroutines or claim success before durable write succeeds.
+bad_smells:
+- state mutation without persistence call
+- ignored persistence error
+- goroutine launched before persist success
+- success reported with failed commit
+activation_triggers:
+- persist
+- install result
+- etcd commit
+- state mutation
+- atomic commit
+expressed_by:
+- awareness/patterns.yaml
+- operators/package-lifecycle.md
+related_invariants:
+- install.result.atomic_commit
+zooms_out_to:
+- local_success_not_global_convergence
+zooms_in_to: []
+related_to:
+- workflow.step_receipts_are_evidence
+status: extracted_candidate

@@ -1,0 +1,28 @@
+id: service_registration.must_match_runtime_and_repository
+level: principle
+title: Service registration must match repository, desired, installed, and runtime evidence
+intent: A service being registered/discoverable is not enough; registration, package identity, desired state, installed state, and runtime health must be reconciled.
+agent_guidance: Do not treat discovery registration as proof of deployment. Check layer alignment and expose registration gaps.
+bad_smells:
+- service registered but no package
+- runtime running but no service record
+- desired service missing from discovery
+- registration gap ignored
+activation_triggers:
+- service registration
+- discovery
+- registration gap
+- service list
+- package
+expressed_by:
+- operators/cluster-doctor.md
+- operators/services-and-packages.md
+- developers/workflow-integration.md
+related_invariants:
+- service.registration_gap
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to: []
+related_to:
+- doctor.findings_are_operator_language
+status: extracted_candidate

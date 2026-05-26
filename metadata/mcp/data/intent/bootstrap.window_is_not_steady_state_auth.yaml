@@ -1,0 +1,28 @@
+id: bootstrap.window_is_not_steady_state_auth
+level: principle
+title: Bootstrap access is temporary and scoped
+intent: Bootstrap exists only for initial setup or controlled joining. It expires and does not become a permanent auth path.
+agent_guidance: Do not reuse bootstrap bypasses for normal operations. Enforce TTL, scope, cluster ID, and post-bootstrap RBAC.
+bad_smells:
+- bootstrap flag grants permanent access
+- bootstrap token accepted after TTL
+- bootstrap bypasses RBAC generally
+- bootstrap used for Day-2 repair
+activation_triggers:
+- bootstrap
+- TTL
+- root password
+- join token
+- security window
+expressed_by:
+- operators/bootstrap-security.md
+- operators/security.md
+- operators/day-0-1-2-operations.md
+related_invariants: []
+zooms_out_to:
+- globular.security.ceremony_over_configuration
+zooms_in_to:
+- day0_day1_are_repeatable_ceremonies
+related_to:
+- cluster.membership.earned_trust
+status: extracted_candidate

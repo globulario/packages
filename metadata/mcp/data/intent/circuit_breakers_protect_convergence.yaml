@@ -1,0 +1,30 @@
+id: circuit_breakers_protect_convergence
+level: pattern
+title: Circuit breakers protect the convergence loop
+intent: Failing dependencies must not stall or poison the release/convergence lane. Circuits open, expose degraded state, serve last-known-good when safe, and probe recovery.
+agent_guidance: Pair retries with circuit state, bounded deadline, and LKG/degraded response. Never block authority publication on a degraded dependency.
+bad_smells:
+- blind retry forever
+- dependency hang blocks release
+- all failures treated transient
+- no LKG fallback for critical consumer
+activation_triggers:
+- circuit
+- dependency degraded
+- timeout
+- LKG
+- critical query
+- release lane
+expressed_by:
+- awareness/design_patterns.yaml
+- operators/convergence-model.md
+related_invariants:
+- critical_queries.must_be_bounded
+- convergence.no_infinite_retry
+zooms_out_to:
+- reconciliation.must_be_idempotent_and_bounded
+zooms_in_to:
+- workflow.backend_health_gate_before_dispatch
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

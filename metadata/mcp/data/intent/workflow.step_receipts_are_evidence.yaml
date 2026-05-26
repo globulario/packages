@@ -1,0 +1,28 @@
+id: workflow.step_receipts_are_evidence
+level: mechanism
+title: Workflow step receipts are evidence of operation
+intent: Each meaningful workflow step should leave durable receipts/outcomes so agents and operators can reconstruct what happened and why.
+agent_guidance: When adding workflow actors, emit step outcomes with status, error class, timestamps, and relevant identity metadata.
+bad_smells:
+- step does side effect with no receipt
+- failure logged only
+- terminal state unclear
+- operator cannot explain partial progress
+activation_triggers:
+- step receipt
+- workflow outcome
+- audit
+- run status
+- actor
+expressed_by:
+- operators/workflows.md
+- awareness/live_overlay.md
+related_invariants:
+- install.result.atomic_commit
+zooms_out_to:
+- workflow.source_of_operational_truth
+zooms_in_to:
+- audit.every_authority_change_is_explainable
+related_to:
+- doctor.findings_are_operator_language
+status: extracted_candidate

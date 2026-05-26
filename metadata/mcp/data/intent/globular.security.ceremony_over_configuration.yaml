@@ -1,0 +1,32 @@
+id: globular.security.ceremony_over_configuration
+level: vision
+title: Security is ceremony, not configuration
+intent: Trust is produced through explicit steps, scopes, expirations, identities, proofs, and audit records. A config value alone must not silently grant durable authority.
+agent_guidance: 'For security-sensitive changes, ask what ceremony proves the claim: token, cert, phase, RBAC decision, cluster ID, audit event, or workflow receipt.'
+bad_smells:
+- static config grants trust
+- bootstrap path reused after bootstrap
+- missing audit around trust transition
+- implicit trust from network location
+activation_triggers:
+- security
+- bootstrap
+- token
+- certificate
+- RBAC
+- trust
+- admission
+expressed_by:
+- operators/security.md
+- operators/bootstrap-security.md
+- operators/dns-and-pki.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- cluster.membership.earned_trust
+- bootstrap.window_is_not_steady_state_auth
+- security.deny_overrides_allow
+related_to:
+- audit.every_authority_change_is_explainable
+status: extracted_candidate

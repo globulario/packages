@@ -1,0 +1,28 @@
+id: objectstore.destructive_changes_require_approval
+level: mechanism
+title: Destructive objectstore topology changes require approval and generation match
+intent: Changing distributed storage membership can destroy availability or data. Destructive transitions require explicit approval, generation checks, and guarded workflow execution.
+agent_guidance: Never wipe or reconfigure MinIO because local state looks stale. Require approved topology transition and post-apply health evidence.
+bad_smells:
+- wipe on seed mismatch without approval
+- restart_in_progress left stale
+- applied_generation ignored
+- destructive cleanup in post-install
+activation_triggers:
+- destructive
+- MinIO wipe
+- topology transition
+- generation
+- restart lock
+- seed mismatch
+expressed_by:
+- operators/minio-topology-validation.md
+- awareness/guardrails.yaml
+related_invariants:
+- objectstoreDestructiveGuard
+zooms_out_to:
+- objectstore.topology_requires_contract
+zooms_in_to: []
+related_to:
+- node_recovery.fence_before_destructive_reseed
+status: extracted_candidate

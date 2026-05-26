@@ -1,0 +1,28 @@
+id: versioning.monorepo_version_is_not_package_identity
+level: principle
+title: Monorepo release version is not always package identity
+intent: A monorepo tag can package many artifacts, but individual packages need change-aware identity so unchanged packages are not misrepresented as new builds.
+agent_guidance: When changing versioning, preserve package-level build identity, origin release, changed-in-release metadata, and deterministic BOM references.
+bad_smells:
+- all packages stamped as changed
+- unchanged package gets misleading version
+- package delta impossible to trace
+- release index loses origin reference
+activation_triggers:
+- monorepo
+- versioning
+- release tag
+- changed_in_release
+- origin_release
+expressed_by:
+- design/version-control-redesign.md
+- design/version-control-phase1-v2.md
+- developers/versioning.md
+related_invariants: []
+zooms_out_to:
+- package.identity_requires_build_id
+zooms_in_to:
+- release.bom_is_precise_release_authority
+related_to:
+- repository.metadata_is_authority
+status: extracted_candidate

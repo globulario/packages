@@ -1,0 +1,30 @@
+id: globular.vision.ai_operable_cluster
+level: vision
+title: The cluster should be operable by structured AI agents
+intent: Globular exposes state, actions, findings, contracts, and workflows as structured interfaces so AI agents can reason and act safely instead of scraping logs or guessing.
+agent_guidance: Prefer typed APIs, MCP tools, explicit schemas, and explainable findings over unstructured text-only operations.
+bad_smells:
+- agent must infer authority from logs
+- manual shell-only operation
+- missing structured status
+- no machine-readable explanation
+activation_triggers:
+- AI
+- MCP
+- agent
+- operator
+- structured context
+- automation
+expressed_by:
+- ai/ai-operator-guide.md
+- awareness/mcp_tools.md
+- awareness/agent_workflow.md
+related_invariants: []
+zooms_out_to: []
+zooms_in_to:
+- awareness.graph_is_compiled_context_not_authority
+- doctor.findings_are_operator_language
+- workflow.source_of_operational_truth
+related_to:
+- globular.vision.explicit_convergence
+status: extracted_candidate

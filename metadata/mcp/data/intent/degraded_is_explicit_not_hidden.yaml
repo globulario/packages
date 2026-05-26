@@ -1,0 +1,59 @@
+id: degraded_is_explicit_not_hidden
+level: principle
+title: Degraded state must be visible, never silently absorbed
+
+intent: >
+  When a subsystem cannot operate correctly — etcd unreachable, AI services
+  down, a layer missing — the cluster must surface that condition explicitly.
+  Silent fallbacks, optimistic assumptions, and swallowed errors hide real
+  problems and make the cluster appear healthy when it is not. A visible
+  degraded state is always safer than an invisible wrong state.
+
+agent_guidance: >
+  Never absorb an error to keep a service running in a degraded mode without
+  surfacing the condition. If AI services are down, the cluster must still
+  operate — but it must do so knowingly, not by pretending AI is available.
+  If a layer is missing, surface UNKNOWN — do not substitute a default.
+  The cluster doctor exists to find and surface these conditions; do not
+  work around it.
+
+bad_smells:
+  - error swallowed with a default value substituted silently
+  - unknown service state rendered as healthy in the UI or API
+  - AI services down but no degraded signal surfaced to operators
+  - health check returning green when a dependency is missing
+  - fallback that masks the real failure from the cluster doctor
+
+expressed_by:
+  - services/golang/cluster_doctor/
+  - services/golang/cluster_controller/
+  - services/golang/ai_executor/
+
+related_invariants:
+  - unknown.state.not.healthy
+
+activation_triggers:
+  - health
+  - health check
+  - degraded
+  - status
+  - health check returning green when something is wrong
+  - silent fallback
+  - error swallowed
+  - fake healthy status
+  - degraded service not surfaced
+  - unknown
+
+zooms_out_to:
+  - globular.vision.explicit_convergence
+
+related_to:
+  - etcd.is_source_of_truth
+  - workflow.source_of_operational_truth
+
+zooms_in_to:
+  - doctor.findings_are_operator_language
+  - health.requires_fresh_evidence
+  - circuit_breakers_protect_convergence
+
+status: seed

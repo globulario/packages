@@ -1,0 +1,31 @@
+id: runtime_health.requires_live_observation
+level: principle
+title: Runtime health requires live observation
+intent: A package being installed does not prove the service is running. Runtime health comes from systemd, gRPC health, and fresh node-agent runtime observation.
+agent_guidance: Do not equate installed with running. Require live runtime evidence and freshness before declaring service health.
+bad_smells:
+- installed package means healthy
+- network port open means verified
+- stale health report accepted forever
+- runtime proof missing but status green
+activation_triggers:
+- runtime
+- health
+- systemd
+- gRPC health
+- installed means running
+- freshness
+expressed_by:
+- awareness/authority_rules.yaml
+- operators/cluster-doctor.md
+- operators/services-and-packages.md
+related_invariants:
+- runtime.installed_state_not_liveness
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- runtime.identity_requires_verification
+- health.requires_fresh_evidence
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

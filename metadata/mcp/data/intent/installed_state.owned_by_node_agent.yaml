@@ -1,0 +1,30 @@
+id: installed_state.owned_by_node_agent
+level: principle
+title: Installed state is owned by node-agent observation
+intent: Installed state records what is actually present on a node and is written by the node agent, not inferred by the controller or repository.
+agent_guidance: Do not let the controller write installed truth. Install actors must commit installed state durably before claiming cluster progress.
+bad_smells:
+- controller writes installed state
+- install returns success before etcd commit
+- runtime health inferred as install state
+- desired state copied into installed state
+activation_triggers:
+- installed state
+- node-agent
+- package registry
+- install result
+- heartbeat
+expressed_by:
+- awareness/authority_rules.yaml
+- awareness/subsystem_boundaries.yaml
+- operators/convergence-model.md
+related_invariants:
+- infra.heartbeat_not_desired_authority
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- local_success_not_global_convergence
+- install.result_requires_durable_commit
+related_to:
+- runtime_health.requires_live_observation
+status: extracted_candidate

@@ -1,0 +1,26 @@
+id: frontend_and_admin_are_clients_not_authorities
+level: principle
+title: Frontend/admin console are clients, not cluster authority
+intent: UI and admin applications should observe and request actions through APIs/workflows; they must not become a parallel source of cluster truth.
+agent_guidance: When building admin UI, call structured APIs and display server-side status/finding data. Do not compute authoritative state in the browser.
+bad_smells:
+- frontend infers cluster health from partial data
+- UI writes etcd directly
+- browser stores desired state
+- admin action bypasses workflow
+activation_triggers:
+- admin console
+- frontend
+- UI
+- browser
+- dashboard
+expressed_by:
+- awareness/frontend_invariants.yaml
+- operators/mcp-setup.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to: []
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

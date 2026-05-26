@@ -1,0 +1,27 @@
+id: desired_hash.is_convergence_identity
+level: mechanism
+title: Desired hash is the compact identity of convergence
+intent: The desired hash represents the resolved desired snapshot and allows drift detection without re-resolving external repository state.
+agent_guidance: When changing convergence logic, preserve desired hash as the comparison token for resolved desired state.
+bad_smells:
+- hash recomputed from floating latest
+- desired hash ignored
+- drift comparison uses partial fields
+- hash changed without desired transition
+activation_triggers:
+- desired_hash
+- convergence
+- drift
+- snapshot
+- build identity
+expressed_by:
+- awareness/decisions.yaml
+- developers/build-identity.md
+related_invariants:
+- desired.build_id_immutable
+zooms_out_to:
+- desired.build_id_immutable_after_resolution
+zooms_in_to: []
+related_to:
+- state.repository_desired_installed_runtime
+status: extracted_candidate

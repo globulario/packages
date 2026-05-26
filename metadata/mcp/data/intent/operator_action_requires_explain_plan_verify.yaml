@@ -1,0 +1,31 @@
+id: operator_action_requires_explain_plan_verify
+level: pattern
+title: Operator actions follow explain → plan → execute → verify
+intent: Operational actions should expose diagnosis, proposed action, safety assessment, execution path, and verification result.
+agent_guidance: When adding operator commands or MCP operations, include dry-run/explain/status output and post-action verification.
+bad_smells:
+- command mutates without preview
+- no verification phase
+- operator cannot see why action was chosen
+- status after action unknown
+activation_triggers:
+- operator command
+- dry-run
+- explain
+- verify
+- repair
+- MCP
+expressed_by:
+- operators/cluster-doctor.md
+- operators/repository-repair.md
+- operators/node-recovery.md
+- tasks/debug-failed-workflow.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- remediation.must_go_through_workflow
+- doctor.findings_are_operator_language
+related_to:
+- audit.every_authority_change_is_explainable
+status: extracted_candidate

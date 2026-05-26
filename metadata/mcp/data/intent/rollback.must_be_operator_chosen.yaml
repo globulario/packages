@@ -1,0 +1,24 @@
+id: rollback.must_be_operator_chosen
+level: mechanism
+title: Rollback is an explicit operator decision
+intent: Rollback candidates can be listed and verified, but execution requires intentional choice and safety checks.
+agent_guidance: Expose eligible revisions with verify/signature status. Do not auto-select rollback target from panic logic.
+bad_smells:
+- rollback target chosen automatically
+- signature status ignored
+- quarantined revision offered normally
+- rollback bypasses workflow
+activation_triggers:
+- rollback candidates
+- previous revision
+- operator rollback
+- signature status
+expressed_by:
+- operators/package-lifecycle.md
+related_invariants: []
+zooms_out_to:
+- deployment.automatic_rollback_is_forbidden
+zooms_in_to: []
+related_to:
+- repository.signature_policy_gates_trust
+status: extracted_candidate

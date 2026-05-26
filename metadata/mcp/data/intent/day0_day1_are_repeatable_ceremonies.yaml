@@ -1,0 +1,30 @@
+id: day0_day1_are_repeatable_ceremonies
+level: principle
+title: Day-0 and Day-1 are repeatable ceremonies
+intent: Bootstrap and production-readiness steps should be explicit, repeatable, checklisted, and verifiable, not tribal scripts or one-off terminal history.
+agent_guidance: When adding bootstrap/join/install behavior, make it idempotent, observable, and checkable by operators and agents.
+bad_smells:
+- manual step undocumented
+- script only works once
+- bootstrap state unclear
+- operator cannot verify completion
+activation_triggers:
+- Day-0
+- Day-1
+- bootstrap
+- install
+- checklist
+- join node
+expressed_by:
+- operators/day-0-1-2-operations.md
+- operators/installation.md
+- operators/adding-nodes.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.explicit_convergence
+zooms_in_to:
+- bootstrap.window_is_not_steady_state_auth
+- cluster.membership.earned_trust
+related_to:
+- etcd.is_source_of_truth
+status: extracted_candidate

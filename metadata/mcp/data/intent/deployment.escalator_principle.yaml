@@ -1,0 +1,25 @@
+id: deployment.escalator_principle
+level: pattern
+title: Deployment moves forward through explicit correction
+intent: When deployment fails, the system should pause, expose the failed phase, and move forward through explicit correction instead of pretending time can be reversed.
+agent_guidance: Prefer fix-forward workflows, repair steps, or operator-approved rollback over hidden automatic undo.
+bad_smells:
+- failure hidden by rollback
+- database rollback assumed safe
+- no failed phase retained
+- release history rewritten
+activation_triggers:
+- escalator
+- fix forward
+- deployment
+- failure phase
+- migration
+expressed_by:
+- operators/deployment-philosophy.md
+related_invariants: []
+zooms_out_to:
+- deployment.automatic_rollback_is_forbidden
+zooms_in_to: []
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

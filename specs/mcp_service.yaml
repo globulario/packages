@@ -38,6 +38,10 @@ steps:
         owner: globular
         group: globular
         mode: 0750
+      - path: "{{.StateDir}}/intent"
+        owner: globular
+        group: globular
+        mode: 0755
 
   - id: install-mcp-binary
     type: install_package_payload
@@ -143,6 +147,10 @@ steps:
     type: enable_services
     services:
       - globular-mcp.service
+
+  - id: install-intent-nodes
+    type: run_script
+    script: post-install.sh
 
   # No start_services or health_checks — the MCP server starts after all
   # dependencies (etcd, auth, etc.) are up. During Day-0, other services

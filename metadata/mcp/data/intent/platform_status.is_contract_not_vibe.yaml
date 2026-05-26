@@ -1,0 +1,28 @@
+id: platform_status.is_contract_not_vibe
+level: principle
+title: Platform status is a contract, not a vibe
+intent: Status endpoints and platform status reports must map dependencies to explicit states like ok, degraded, missing, unreachable, unauthorized, fake, memory, or local.
+agent_guidance: Do not expose a single vague healthy bit when dependency mode matters. Preserve structured status taxonomy.
+bad_smells:
+- ready=true while dependency fake
+- missing adapter hidden
+- memory/local mode accepted in globular_session
+- status lacks required/dependency source
+activation_triggers:
+- platform status
+- readyz
+- health taxonomy
+- fake
+- memory
+- local
+- adapter
+expressed_by:
+- operators/platform-status.md
+- operators/observability.md
+related_invariants: []
+zooms_out_to:
+- degraded_is_explicit_not_hidden
+zooms_in_to: []
+related_to:
+- globular.vision.ai_operable_cluster
+status: extracted_candidate

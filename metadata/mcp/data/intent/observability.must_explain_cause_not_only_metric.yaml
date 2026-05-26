@@ -1,0 +1,31 @@
+id: observability.must_explain_cause_not_only_metric
+level: principle
+title: Observability must explain cause, not only emit metrics
+intent: Metrics, logs, events, workflow receipts, and doctor findings should connect symptoms to likely causes and operator actions.
+agent_guidance: When adding telemetry, include labels and references that allow navigation to workflow run, service, node, invariant, or finding.
+bad_smells:
+- metric has no node/service label
+- log-only failure with no finding
+- alert lacks remediation context
+- event not tied to workflow
+activation_triggers:
+- observability
+- metric
+- log
+- event
+- alert
+- cause
+- telemetry
+expressed_by:
+- operators/observability.md
+- operators/cluster-doctor.md
+- awareness/semantic_navigation.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- doctor.findings_are_operator_language
+- workflow.step_receipts_are_evidence
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

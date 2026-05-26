@@ -1,0 +1,48 @@
+id: cluster.membership.earned_trust
+level: principle
+title: Cluster membership is earned, not assumed
+
+intent: >
+  A node becomes a cluster member only after phase-ordered, observable proof.
+  Network reachability, MAC address match, and stale persisted state are not
+  sufficient evidence of trust. The join ceremony exists precisely because
+  presence must not be confused with authority.
+
+agent_guidance: >
+  When changing join or admission code, never shortcut proof phases. If a retry
+  or edge case tempts you to reuse existing membership state, stop. Add an
+  explicit proof-refresh or cleanup state instead. The phases exist in order
+  for a reason — each one narrows the trust surface.
+
+bad_smells:
+  - reachability treated as identity
+  - stale etcd membership record used as admission proof
+  - MAC address match used as trust shortcut
+  - join retry that skips earlier phases
+  - ghost member not cleaned before re-admission
+
+expressed_by:
+  - Globular/gateway_server/
+  - services/golang/cluster_controller/
+
+related_invariants:
+  - join.token.validated.before.phase
+  - etcd.ghost.cleared.before.member.add
+  - join.phase.order.enforced
+
+activation_triggers:
+  - node join retry
+  - stale membership
+  - ghost member
+  - MAC address reuse
+  - admission shortcut
+  - node rejoin after failure
+
+zooms_out_to:
+  - globular.security.ceremony_over_configuration
+
+zooms_in_to:
+  - join.token.validation
+  - join.ghost.cleanup
+
+status: seed

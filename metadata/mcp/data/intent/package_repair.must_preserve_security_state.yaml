@@ -1,0 +1,27 @@
+id: package_repair.must_preserve_security_state
+level: principle
+title: Repository repair must preserve security state
+intent: Repair can reconstruct missing metadata/blob relationships, but it must not silently restore revoked/quarantined artifacts or bypass trust policy.
+agent_guidance: When adding repair actions, refuse revoked artifacts, require explicit quarantine override, and report recommended action.
+bad_smells:
+- repair republishes revoked artifact
+- quarantine lifted by import
+- BROKEN state hidden
+- repair does not verify signature/checksum
+activation_triggers:
+- repository repair
+- BROKEN_MISSING_BLOB
+- quarantine
+- revoked
+- checksum mismatch
+expressed_by:
+- operators/repository-repair.md
+- operators/package-lifecycle.md
+related_invariants: []
+zooms_out_to:
+- repository.lifecycle_state_machine
+zooms_in_to:
+- repository.signature_policy_gates_trust
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

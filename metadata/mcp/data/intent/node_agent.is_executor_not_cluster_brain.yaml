@@ -1,0 +1,30 @@
+id: node_agent.is_executor_not_cluster_brain
+level: principle
+title: Node agent is executor and observer, not cluster brain
+intent: Node agent installs packages, manages systemd, observes runtime, and writes installed/runtime facts, but it does not decide cluster-wide desired state.
+agent_guidance: Keep node-agent actions local and authority-scoped. Cluster-wide decisions belong to controller/workflow path.
+bad_smells:
+- node-agent changes desired state
+- node-agent decides topology alone
+- node-agent writes cluster policy
+- local observation drives global mutation directly
+activation_triggers:
+- node-agent
+- executor
+- observer
+- systemd
+- install
+- desired state
+expressed_by:
+- awareness/subsystem_boundaries.yaml
+- operators/architecture-overview.md
+related_invariants:
+- infra.heartbeat_not_desired_authority
+zooms_out_to:
+- subsystem.boundaries_define_authority
+zooms_in_to:
+- installed_state.owned_by_node_agent
+- runtime_health.requires_live_observation
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

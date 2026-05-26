@@ -1,0 +1,28 @@
+id: awareness.preflight_before_edit
+level: pattern
+title: Agents preflight before editing significant code
+intent: Before editing, agents should load relevant invariants, forbidden fixes, tests, and intent context so local changes do not violate global design.
+agent_guidance: Run awareness/intent preflight on the primary file or concept before significant code changes. If no match exists, report blind spot.
+bad_smells:
+- agent edits high-risk file without context
+- no-match ignored
+- forbidden fix rediscovered
+- tests not selected from graph
+activation_triggers:
+- preflight
+- agent edit
+- high-risk file
+- forbidden fix
+- intent_explain
+expressed_by:
+- awareness/agent_workflow.md
+- awareness/daily_workflow.md
+- awareness/preflight_audit.md
+related_invariants: []
+zooms_out_to:
+- awareness.graph_is_compiled_context_not_authority
+zooms_in_to:
+- awareness.unknown_impact_is_signal
+related_to:
+- globular.vision.ai_operable_cluster
+status: extracted_candidate

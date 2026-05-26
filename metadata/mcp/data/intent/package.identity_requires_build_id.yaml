@@ -1,0 +1,32 @@
+id: package.identity_requires_build_id
+level: principle
+title: Package identity is build identity, not version text
+intent: Version strings are not enough to identify a deployable artifact. Build id, platform, checksum/digest, and resolved desired hash carry the identity needed for convergence.
+agent_guidance: Never compare version-only when deciding drift, rollback, or installation correctness. Use resolved build identity and hashes.
+bad_smells:
+- installed == version
+- latest version compared to installed
+- platform ignored
+- same version with different build treated equal
+activation_triggers:
+- build_id
+- version
+- digest
+- hash
+- drift
+- rollback
+- identity
+expressed_by:
+- developers/build-identity.md
+- architecture/package-supply-chain.md
+- awareness/patterns.yaml
+related_invariants:
+- desired.build_id_immutable
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- desired.build_id_immutable_after_resolution
+- desired_hash.is_convergence_identity
+related_to:
+- repository.metadata_is_authority
+status: extracted_candidate
