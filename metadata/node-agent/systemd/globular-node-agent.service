@@ -7,7 +7,7 @@ Wants=network-online.target globular-event.service globular-cluster-controller.s
 Type=simple
 User=root
 Group=root
-WorkingDirectory={{.StateDir}}/node_agent
+WorkingDirectory=-{{.StateDir}}/node_agent
 Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
 
 ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/node_agent && chown root:root {{.StateDir}}/node_agent'
