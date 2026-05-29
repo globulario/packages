@@ -111,37 +111,82 @@ steps:
         content: |
           #!/bin/sh
           # Project S — idempotent scylla-manager cluster registration.
+          # Project U.2 — HTTPS-first read/probe with HTTP fallback.
+          #
           # Runs as ExecStartPost after globular-scylla-manager.service has
           # been told to start. Exits 0 on success or on any "soft" error
           # so the unit stays up; cluster_doctor reports unregistered state
           # as a backup-readiness finding.
+          #
+          # IMPORTANT: HTTPS probe failure modes are NOT all equivalent.
+          #   curl exit 7  → connection refused: HTTPS listener not enabled
+          #                  → SAFE fallback to HTTP.
+          #   curl exit 51/60/35 → TLS handshake or CA validation failure:
+          #                  → DO NOT fall back to HTTP. Exit non-zero so the
+          #                    unit / operator notice. Silent fallback would
+          #                    let a MitM hide the unregistered state.
           set -u
           CLUSTER_NAME="${SCYLLA_MANAGER_CLUSTER_NAME:-globular-internal}"
-          API_BASE="http://$(hostname -I | awk '{print $1}'):5080/api/v1"
-          AGENT_CFG="{{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml"
-          SCYLLA_CFG="/etc/scylla/scylla.yaml"
+          HOST="${SCYLLA_MANAGER_HOST:-$(hostname -I | awk '{print $1}')}"
+          HTTPS_BASE="${SCYLLA_MANAGER_HTTPS_BASE:-https://$HOST:5443/api/v1}"
+          HTTP_BASE="${SCYLLA_MANAGER_HTTP_BASE:-http://$HOST:5080/api/v1}"
+          AGENT_CFG="${SCYLLA_AGENT_CFG:-{{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml}"
+          SCYLLA_CFG="${SCYLLA_CFG:-/etc/scylla/scylla.yaml}"
+          GLOBULAR_CA="${GLOBULAR_CA:-/var/lib/globular/pki/ca.crt}"
           MAX_WAIT_SECONDS=60
 
           log() { echo "scylla-manager-register-cluster: $*" >&2; }
 
-          # 1. Wait for scylla-manager HTTP API to be ready (it takes a few
-          #    seconds to migrate schema + initialize on cold start).
+          # ── Phase 1: choose read-side endpoint (HTTPS preferred) ─────────
+          # Probe HTTPS with strict CA verification. Distinguish:
+          #   exit 0       → HTTPS reachable + valid cert → use HTTPS
+          #   exit 7       → HTTPS not enabled (conn refused) → HTTP fallback
+          #   exit 51/60/35 → TLS/cert failure → fail closed
+          # Note: --capath /dev/null is REQUIRED — curl on Ubuntu falls back
+          # to the system CA bundle when only --cacert is supplied, which
+          # would let a cert signed by a system-trusted CA pass verification
+          # even though we want STRICT verification against the Globular CA
+          # only. Setting --capath to a non-directory forces curl to honor
+          # --cacert as the sole trust anchor.
+          READ_BASE=""
+          READ_CURL_OPTS=""
+          curl -sf -m 2 --capath /dev/null --cacert "$GLOBULAR_CA" "$HTTPS_BASE/version" >/dev/null 2>&1
+          probe_rc=$?
+          case "$probe_rc" in
+            0)
+              READ_BASE="$HTTPS_BASE"
+              READ_CURL_OPTS="--capath /dev/null --cacert $GLOBULAR_CA"
+              log "HTTPS reachable with valid cert; using $HTTPS_BASE for read probes"
+              ;;
+            7)
+              READ_BASE="$HTTP_BASE"
+              READ_CURL_OPTS=""
+              log "HTTPS not enabled (curl exit 7); falling back to $HTTP_BASE for read probes"
+              ;;
+            *)
+              log "HTTPS reachable but cert validation failed (curl exit $probe_rc); refusing to fall back to HTTP — exiting non-zero so doctor surfaces this"
+              exit 2
+              ;;
+          esac
+
+          # ── Phase 2: wait for read API readiness ─────────────────────────
           n=0
           while [ "$n" -lt "$MAX_WAIT_SECONDS" ]; do
-            if curl -sf -m 2 "$API_BASE/version" >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            if curl -sf -m 2 $READ_CURL_OPTS "$READ_BASE/version" >/dev/null 2>&1; then
               break
             fi
             sleep 1
             n=$((n+1))
           done
           if [ "$n" -ge "$MAX_WAIT_SECONDS" ]; then
-            log "scylla-manager HTTP API at $API_BASE did not become ready within ${MAX_WAIT_SECONDS}s — skipping registration; doctor will report unregistered state"
+            log "API at $READ_BASE did not become ready within ${MAX_WAIT_SECONDS}s — skipping registration; doctor will report unregistered state"
             exit 0
           fi
 
-          # 2. Idempotency: skip when a cluster of the expected name already
-          #    exists. Empty array means no clusters registered.
-          existing=$(curl -sf -m 3 "$API_BASE/clusters" 2>/dev/null || echo '[]')
+          # ── Phase 3: idempotency ─────────────────────────────────────────
+          # shellcheck disable=SC2086
+          existing=$(curl -sf -m 3 $READ_CURL_OPTS "$READ_BASE/clusters" 2>/dev/null || echo '[]')
           if echo "$existing" | grep -q "\"name\":\"$CLUSTER_NAME\""; then
             log "cluster '$CLUSTER_NAME' already registered — no-op"
             exit 0
@@ -161,7 +206,7 @@ steps:
             exit 0
           fi
 
-          # 3. Read agent auth token + HTTPS port from agent config.
+          # ── Phase 4: read agent auth token + HTTPS port from agent config
           token=$(grep -E '^auth_token:' "$AGENT_CFG" 2>/dev/null | awk '{print $2}')
           if [ -z "$token" ]; then
             log "agent auth_token not found in $AGENT_CFG — skipping registration"
@@ -176,10 +221,13 @@ steps:
             exit 0
           fi
 
-          # 4. Register. Use sctool with the manager's HTTP API explicitly
-          #    (avoids the default-port assumption of the bare CLI).
-          log "registering cluster '$CLUSTER_NAME' (host=$host port=$agent_port)"
-          if sctool --api-url "$API_BASE" cluster add \
+          # ── Phase 5: register (write path stays on HTTP per Project U.2) ─
+          # sctool 3.10.1 does not expose --ca-file for the API URL, so the
+          # write path remains on the HTTP listener until upstream support
+          # lands or the script switches to a curl-based POST fallback. The
+          # READ path above is HTTPS-first; only the WRITE call uses HTTP.
+          log "registering cluster '$CLUSTER_NAME' via sctool over $HTTP_BASE (write path; HTTPS pending sctool --ca-file)"
+          if sctool --api-url "$HTTP_BASE" cluster add \
                 --host "$host" \
                 --port "$agent_port" \
                 --name "$CLUSTER_NAME" \
