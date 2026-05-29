@@ -93,6 +93,104 @@ steps:
           chown globular:globular "$CFG"
           chmod 0640 "$CFG"
 
+  # Project S: package-shipped cluster registration script. Idempotent:
+  # skips when a cluster is already registered; otherwise reads the agent
+  # token + Scylla host + agent HTTPS port from local config and calls
+  # `sctool cluster add`. Failure to register is logged but does NOT take
+  # down the unit (the script is invoked via ExecStartPost=- and the
+  # script exits 0 on registration error; cluster_doctor surfaces the
+  # unregistered state via the scylla_manager.cluster_registered rule).
+  - id: install-scylla-manager-register-cluster
+    type: install_files
+    files:
+      - path: "{{.Prefix}}/bin/scylla-manager-register-cluster"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          # Project S — idempotent scylla-manager cluster registration.
+          # Runs as ExecStartPost after globular-scylla-manager.service has
+          # been told to start. Exits 0 on success or on any "soft" error
+          # so the unit stays up; cluster_doctor reports unregistered state
+          # as a backup-readiness finding.
+          set -u
+          CLUSTER_NAME="${SCYLLA_MANAGER_CLUSTER_NAME:-globular-internal}"
+          API_BASE="http://$(hostname -I | awk '{print $1}'):5080/api/v1"
+          AGENT_CFG="{{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml"
+          SCYLLA_CFG="/etc/scylla/scylla.yaml"
+          MAX_WAIT_SECONDS=60
+
+          log() { echo "scylla-manager-register-cluster: $*" >&2; }
+
+          # 1. Wait for scylla-manager HTTP API to be ready (it takes a few
+          #    seconds to migrate schema + initialize on cold start).
+          n=0
+          while [ "$n" -lt "$MAX_WAIT_SECONDS" ]; do
+            if curl -sf -m 2 "$API_BASE/version" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+            n=$((n+1))
+          done
+          if [ "$n" -ge "$MAX_WAIT_SECONDS" ]; then
+            log "scylla-manager HTTP API at $API_BASE did not become ready within ${MAX_WAIT_SECONDS}s — skipping registration; doctor will report unregistered state"
+            exit 0
+          fi
+
+          # 2. Idempotency: skip when a cluster of the expected name already
+          #    exists. Empty array means no clusters registered.
+          existing=$(curl -sf -m 3 "$API_BASE/clusters" 2>/dev/null || echo '[]')
+          if echo "$existing" | grep -q "\"name\":\"$CLUSTER_NAME\""; then
+            log "cluster '$CLUSTER_NAME' already registered — no-op"
+            exit 0
+          fi
+          # Also check by host: a cluster registered under a different name
+          # for the same Scylla host should not be duplicated. Operator must
+          # rename or remove the existing one first; we do not silently
+          # replace because that would lose any operator-configured backup
+          # tasks attached to the prior registration.
+          host=$(grep -E '^rpc_address:'    "$SCYLLA_CFG" 2>/dev/null | awk '{print $2}' | tr -d "[:space:]'\"" || true)
+          [ -z "$host" ] && host=$(grep -E '^listen_address:' "$SCYLLA_CFG" 2>/dev/null | awk '{print $2}' | tr -d "[:space:]'\"" || true)
+          if [ -z "$host" ] || [ "$host" = "0.0.0.0" ]; then
+            host=$(ss -lnt | awk '/:9042 /{split($4,a,":"); print a[1]; exit}')
+          fi
+          if echo "$existing" | grep -q "\"host\":\"$host\""; then
+            log "a cluster is already registered under host $host (different name) — skipping; operator review required"
+            exit 0
+          fi
+
+          # 3. Read agent auth token + HTTPS port from agent config.
+          token=$(grep -E '^auth_token:' "$AGENT_CFG" 2>/dev/null | awk '{print $2}')
+          if [ -z "$token" ]; then
+            log "agent auth_token not found in $AGENT_CFG — skipping registration"
+            exit 0
+          fi
+          # Agent HTTPS listen line e.g. "https: 10.0.0.63:5612"
+          agent_port=$(grep -E '^https:' "$AGENT_CFG" 2>/dev/null | awk '{print $2}' | awk -F: '{print $NF}')
+          [ -z "$agent_port" ] && agent_port="10001" # upstream default
+
+          if [ -z "$host" ] || [ "$host" = "127.0.0.1" ]; then
+            log "cannot determine ScyllaDB routable IP — skipping registration"
+            exit 0
+          fi
+
+          # 4. Register. Use sctool with the manager's HTTP API explicitly
+          #    (avoids the default-port assumption of the bare CLI).
+          log "registering cluster '$CLUSTER_NAME' (host=$host port=$agent_port)"
+          if sctool --api-url "$API_BASE" cluster add \
+                --host "$host" \
+                --port "$agent_port" \
+                --name "$CLUSTER_NAME" \
+                --auth-token "$token" >/tmp/scylla-manager-register-cluster.log 2>&1; then
+            log "cluster '$CLUSTER_NAME' registered"
+          else
+            log "registration command failed; doctor will surface unregistered state. sctool output:"
+            cat /tmp/scylla-manager-register-cluster.log >&2 || true
+          fi
+          exit 0
+
   - id: install-scylla-manager-service
     type: install_services
     units:
@@ -115,6 +213,12 @@ steps:
           Group=globular
           ExecStartPre={{.Prefix}}/bin/scylla-manager-configure
           ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
+          # Project S: idempotent cluster registration. The "-" prefix makes
+          # failure non-fatal so registration issues don't take down the unit.
+          # cluster_doctor's scylla_manager.cluster_registered invariant
+          # surfaces the unregistered state when this script exits 0 without
+          # actually registering (e.g. agent token missing).
+          ExecStartPost=-+{{.Prefix}}/bin/scylla-manager-register-cluster
           Restart=on-failure
           RestartSec=10
           LimitNOFILE=100000
