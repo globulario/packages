@@ -40,7 +40,7 @@ mkdir -p "$OUT_DIR"
 globular pkg build \
   --spec "$ROOT/specs/awareness_graph_service.yaml" \
   --root "$ROOT" \
-  --version "0.0.1" \
+  --version "0.0.4" \
   --publisher "core@globular.io" \
   --platform "linux_amd64" \
   --out "$OUT_DIR" \

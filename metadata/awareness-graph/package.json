@@ -2,7 +2,7 @@
   "type": "service",
   "name": "awareness-graph",
   "service_id": "awareness.AwarenessGraphService",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/awareness-graph",
@@ -22,7 +22,9 @@
     "require_store": false,
     "startup_health_timeout": "5s",
     "query_exposed_as_sparql": false,
-    "mcp_query_exposed_by_default": false
+    "mcp_query_exposed_by_default": false,
+    "proxy_behavior": "reserved_metadata_only",
+    "proxy_note": "Proxy port 10121 is reserved in metadata; this package path runs direct gRPC only."
   },
   "description": "Awareness graph service for Resolve, Impact, Briefing, and constrained Query over compiled RDF awareness context.",
   "keywords": [
@@ -37,5 +39,5 @@
   "license": "Apache-2.0",
   "systemd_unit": "globular-awareness-graph.service",
   "health_check_unit": "globular-awareness-graph.service",
-  "entrypoint_checksum": "sha256:28a12e573faafd16111d04ea5a4cb65ef031d54cefebcf3c7cd5f69dddd138a0"
+  "entrypoint_checksum": "sha256:c592256e312f6bfd33fd697af13228c4c0df89857b4c9074027f96207725efdd"
 }

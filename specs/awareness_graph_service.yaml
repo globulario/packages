@@ -3,7 +3,7 @@ version: 1
 metadata:
   name: awareness-graph
   service_id: awareness.AwarenessGraphService
-  version: "0.0.1"
+  version: "0.0.4"
   kind: service
   description: "Awareness graph service for Resolve, Impact, Briefing, and constrained Query over compiled RDF awareness context."
   keywords: [awareness, rdf, graph, briefing, impact, intent, agent]
@@ -40,6 +40,10 @@ steps:
         group: globular
         mode: 0750
       - path: "{{.StateDir}}/services"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/services/awareness-graph"
         owner: globular
         group: globular
         mode: 0750
