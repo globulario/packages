@@ -209,3 +209,24 @@ People working in this directory are usually:
 ## License
 
 See the repository license and the licenses declared by the individual artifacts where applicable.
+
+
+## awareness-graph package integration
+
+`awareness-graph` is integrated as a service package via:
+- `specs/awareness_graph_service.yaml`
+- `metadata/awareness-graph/package.json`
+- `scripts/build-awareness-graph-package.sh`
+- `scripts/check-awareness-graph-package.sh`
+
+Build from source repo and emit package artifact:
+
+```bash
+./scripts/build-awareness-graph-package.sh /tmp/awareness-graph-packages
+```
+
+Validate metadata/spec safety:
+
+```bash
+./scripts/check-awareness-graph-package.sh
+```

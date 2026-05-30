@@ -70,7 +70,7 @@ declare -A CATALOG_KIND=(
   [node-agent]=service          [ai-memory]=service
   [ai-executor]=service         [ai-router]=service
   [ai-watcher]=service          [workflow]=service
-  [mcp]=service
+  [mcp]=service                [awareness-graph]=service
 
   # KindCommand
   [rclone]=command  [restic]=command  [sctool]=command

@@ -581,6 +581,19 @@ packages:
     provides: []
     requires: [etcd]
 
+
+  - name: awareness-graph
+    kind: service
+    binary: awareness-graph
+    go_target: ""
+    version_source: platform
+    publisher_id: core@globular.io
+    skip_runtime_check: false
+    bootstrap_tier: workload
+    profiles: [core]
+    provides: [awareness.AwarenessGraphService]
+    requires: []
+
   # ════════════════════════════════════════════════════════════════════════════
   # SERVICES — AI subsystem
   # ════════════════════════════════════════════════════════════════════════════
