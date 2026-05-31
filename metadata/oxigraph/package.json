@@ -24,6 +24,7 @@
     "awareness"
   ],
   "license": "MIT",
+  "profiles": ["control-plane"],
   "systemd_unit": "globular-oxigraph.service",
   "health_check_unit": "globular-oxigraph.service",
   "health_check_port": 7878,

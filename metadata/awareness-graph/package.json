@@ -37,6 +37,7 @@
     "agent"
   ],
   "license": "Apache-2.0",
+  "profiles": ["control-plane"],
   "systemd_unit": "globular-awareness-graph.service",
   "health_check_unit": "globular-awareness-graph.service",
   "entrypoint_checksum": "sha256:c592256e312f6bfd33fd697af13228c4c0df89857b4c9074027f96207725efdd"
