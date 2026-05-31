@@ -254,6 +254,23 @@ packages:
     requires: [scylladb]
     hard_deps: [scylladb]
 
+  - name: oxigraph
+    kind: infrastructure
+    binary: oxigraph
+    go_target: ""
+    systemd_unit: globular-oxigraph.service
+    version_source: self
+    publisher_id: core@globular.io
+    control_plane_critical: false
+    day0_required: true
+    day1_join_required: false
+    skip_runtime_check: false
+    bootstrap_tier: supporting
+    profiles: [core]
+    provides: []
+    requires: []
+    hard_deps: []
+
   # ════════════════════════════════════════════════════════════════════════════
   # COMMANDS — Binary-only tools, no systemd unit
   # ════════════════════════════════════════════════════════════════════════════

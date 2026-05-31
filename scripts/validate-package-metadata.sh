@@ -50,6 +50,7 @@ declare -A CATALOG_KIND=(
   [gateway]=infrastructure      [envoy]=infrastructure
   [prometheus]=infrastructure   [alertmanager]=infrastructure
   [node-exporter]=infrastructure [scylla-manager]=infrastructure
+  [oxigraph]=infrastructure
   [scylla-manager-agent]=infrastructure [sidekick]=infrastructure
   [keepalived]=infrastructure
 
