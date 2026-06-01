@@ -45,7 +45,7 @@ steps:
       - path: "{{.StateDir}}/etcd"
         owner: globular
         group: globular
-        mode: 0750
+        mode: 0700
       - path: "{{.StateDir}}/config"
         owner: globular
         group: globular
@@ -84,7 +84,7 @@ steps:
           Group=globular
           ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/etcd
           ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/etcd
-          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/etcd
+          ExecStartPre=+/usr/bin/chmod 0700 {{.StateDir}}/etcd
           ExecStartPre=+/bin/sh -c 'chown globular:globular {{.StateDir}}/pki/issued/services/service.key {{.StateDir}}/pki/issued/services/service.crt 2>/dev/null || true'
           ExecStart={{.Prefix}}/bin/etcd --config-file {{.StateDir}}/config/etcd.yaml
           Restart=on-failure
