@@ -219,6 +219,22 @@ elif [[ "${SCYLLA_HAS_RAFT_STATE}" == "true" ]]; then
     if [[ "${OWNS_DATA}" == "true" ]]; then
         echo "[scylladb/post-install] Ownership marker matches current cluster — preserving Raft state (upgrade path)"
 
+    elif [[ "${SCYLLA_INSTALL_INTENT}" == "initial-node" ]]; then
+        # Day-0 initial-node bootstrap: this node is forming a new cluster from
+        # scratch. Stale Raft state from a previous failed Day-0 attempt must be
+        # wiped — there is no live cluster to protect.
+        echo "[scylladb/post-install] Day-0 initial-node: wiping stale Raft state from previous failed attempt"
+        mkdir -p "${STATE_DIR}/audit"
+        echo "$(date -Iseconds) wiped stale ScyllaDB state on $(hostname) for Day-0 initial-node bootstrap" >> "${STATE_DIR}/audit/scylladb-reinit.log"
+        rm -rf "${SCYLLA_DATA_DIR}" \
+               "${SCYLLA_COMMITLOG_DIR}" \
+               "${SCYLLA_HINTS_DIR}" \
+               "${SCYLLA_VIEW_HINTS_DIR}" \
+               "${SCYLLA_BASE_DIR}/coredump"
+        echo "[scylladb/post-install] Stale state wiped"
+        SCYLLA_HAS_EXISTING_DATA=false
+        SCYLLA_HAS_RAFT_STATE=false
+
     elif [[ "${SCYLLA_INSTALL_INTENT}" == "fresh-join" && "${ALLOW_STALE_SCYLLA_REINIT_ON_JOIN}" == "true" ]]; then
         # Day-1 node admission with an ownership mismatch: the local data belongs
         # to an unknown cluster epoch. Wipe ALL Scylla state — data dir, commitlog,
