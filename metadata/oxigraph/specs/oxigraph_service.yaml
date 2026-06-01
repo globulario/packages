@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   name: oxigraph
-  version: "0.5.9"
+  version: "0.5.8"
   kind: infrastructure
   description: "Oxigraph RDF store backend for awareness-graph query and graph-store load paths."
   keywords: [oxigraph, rdf, sparql, triplestore, awareness]
