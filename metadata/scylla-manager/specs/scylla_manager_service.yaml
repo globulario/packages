@@ -226,16 +226,18 @@ steps:
           # write path remains on the HTTP listener until upstream support
           # lands or the script switches to a curl-based POST fallback. The
           # READ path above is HTTPS-first; only the WRITE call uses HTTP.
+          # Output is captured in a variable and logged via journald — no
+          # /tmp file needed (avoids permission issues in systemd context).
           log "registering cluster '$CLUSTER_NAME' via sctool over $HTTP_BASE (write path; HTTPS pending sctool --ca-file)"
-          if sctool --api-url "$HTTP_BASE" cluster add \
+          sctool_out=$(sctool --api-url "$HTTP_BASE" cluster add \
                 --host "$host" \
                 --port "$agent_port" \
                 --name "$CLUSTER_NAME" \
-                --auth-token "$token" >/tmp/scylla-manager-register-cluster.log 2>&1; then
+                --auth-token "$token" 2>&1)
+          if [ $? -eq 0 ]; then
             log "cluster '$CLUSTER_NAME' registered"
           else
-            log "registration command failed; doctor will surface unregistered state. sctool output:"
-            cat /tmp/scylla-manager-register-cluster.log >&2 || true
+            log "registration command failed; doctor will surface unregistered state. sctool output: $sctool_out"
           fi
           exit 0
 
