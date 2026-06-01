@@ -153,7 +153,12 @@ fi
 # join and clears+saves it after completion. A non-empty join_id here means
 # this post-install is part of a live Day-1 join, not an upgrade.
 if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
-    STATE_JSON="${STATE_DIR}/nodeagent/state.json"
+    # Use canonical node-agent path (hyphen); fall back to legacy nodeagent alias.
+    if [[ -f "${STATE_DIR}/node-agent/state.json" ]]; then
+        STATE_JSON="${STATE_DIR}/node-agent/state.json"
+    else
+        STATE_JSON="${STATE_DIR}/nodeagent/state.json"
+    fi
     if [[ -f "${STATE_JSON}" ]]; then
         JOIN_ID_VAL=$(grep -oP '"join_id"\s*:\s*"\K[^"]+' "${STATE_JSON}" 2>/dev/null || echo "")
         if [[ -n "${JOIN_ID_VAL}" ]]; then
