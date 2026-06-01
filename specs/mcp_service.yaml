@@ -148,11 +148,13 @@ steps:
     services:
       - globular-mcp.service
 
+  - id: start-mcp
+    type: start_services
+    services:
+      - globular-mcp.service
+    binaries:
+      globular-mcp.service: mcp
+
   - id: install-intent-nodes
     type: run_script
     script: post-install.sh
-
-  # No start_services or health_checks — the MCP server starts after all
-  # dependencies (etcd, auth, etc.) are up. During Day-0, other services
-  # aren't running yet. Systemd will start it on next boot or the Day-0
-  # script starts all services together at the end.
