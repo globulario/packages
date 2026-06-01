@@ -1,7 +1,7 @@
 {
   "type": "infrastructure",
   "name": "scylla-manager",
-  "version": "3.8.1",
+  "version": "3.10.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/scylla_manager",
@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/scylla_manager_service.yaml"
   },
-  "description": "ScyllaDB Manager server for automated repair, backup, and cluster management.",
+  "description": "ScyllaDB Manager daemon for backup, repair, and cluster operations.",
   "keywords": [
     "scylla-manager",
     "scylladb",

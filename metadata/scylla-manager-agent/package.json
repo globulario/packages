@@ -1,7 +1,7 @@
 {
   "type": "infrastructure",
   "name": "scylla-manager-agent",
-  "version": "3.8.1",
+  "version": "3.10.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/scylla_manager_agent",
@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/scylla_manager_agent_service.yaml"
   },
-  "description": "ScyllaDB Manager agent that runs on each node to execute repair and backup operations.",
+  "description": "ScyllaDB Manager agent running on each database node.",
   "keywords": [
     "scylla-manager-agent",
     "scylladb",

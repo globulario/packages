@@ -10,7 +10,7 @@
     "spec": "specs/scylladb_service.yaml",
     "scriptsDir": "scripts"
   },
-  "description": "High-performance NoSQL database (Cassandra-compatible) for persistent service data.",
+  "description": "High-performance NoSQL database (Cassandra-compatible); runs scylla_io_setup for I/O calibration on first install.",
   "keywords": [
     "scylladb",
     "database",

@@ -9,7 +9,7 @@
     "configDir": "config/envoy",
     "spec": "specs/envoy_service.yaml"
   },
-  "description": "L7 edge proxy handling TLS termination, gRPC-Web translation, and dynamic service routing.",
+  "description": "L7 proxy and service mesh data plane; routes and terminates mTLS for Globular services.",
   "keywords": [
     "envoy",
     "proxy",

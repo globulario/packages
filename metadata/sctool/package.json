@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/sctool_cmd.yaml"
   },
-  "description": "Scylla Manager CLI client for scheduling repairs, backups, and managing ScyllaDB clusters.",
+  "description": "CLI tool for ScyllaDB Manager cluster operations and scheduling.",
   "keywords": [
     "sctool",
     "scylla-manager",

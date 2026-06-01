@@ -9,7 +9,7 @@
     "configDir": "config/etcd",
     "spec": "specs/etcd_service.yaml"
   },
-  "description": "Distributed key-value store used for service configuration, leader election, and cluster coordination.",
+  "description": "Distributed key-value store providing the sole source of cluster truth for Globular.",
   "keywords": [
     "etcd",
     "key-value",

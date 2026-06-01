@@ -2,7 +2,7 @@
   "type": "service",
   "name": "awareness-graph",
   "service_id": "awareness.AwarenessGraphService",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/awareness-graph",
@@ -26,7 +26,7 @@
     "proxy_behavior": "reserved_metadata_only",
     "proxy_note": "Proxy port 10121 is reserved in metadata; this package path runs direct gRPC only."
   },
-  "description": "Awareness graph service for Resolve, Impact, Briefing, and constrained Query over compiled RDF awareness context.",
+  "description": "RDF knowledge graph service for code awareness, briefings, and impact analysis.",
   "keywords": [
     "awareness",
     "rdf",
@@ -37,7 +37,9 @@
     "agent"
   ],
   "license": "Apache-2.0",
-  "profiles": ["control-plane"],
+  "profiles": [
+    "control-plane"
+  ],
   "systemd_unit": "globular-awareness-graph.service",
   "health_check_unit": "globular-awareness-graph.service",
   "entrypoint_checksum": "sha256:c592256e312f6bfd33fd697af13228c4c0df89857b4c9074027f96207725efdd"

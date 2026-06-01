@@ -1,7 +1,7 @@
 {
   "type": "infrastructure",
   "name": "keepalived",
-  "version": "0.0.1",
+  "version": "2.2.8",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/noop",
@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/keepalived_service.yaml"
   },
-  "description": "VRRP-based virtual IP failover daemon for high-availability cluster networking.",
+  "description": "VRRP-based VIP failover daemon; installs via apt on the host OS.",
   "keywords": [
     "keepalived",
     "vrrp",

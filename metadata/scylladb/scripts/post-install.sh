@@ -372,10 +372,46 @@ ENVEOF
 fi
 
 mkdir -p "${SCYLLA_CONFD_DIR}"
-[[ -f "${SCYLLA_CONFD_DIR}/dev-mode.conf" ]] || echo "DEV_MODE=--developer-mode=1" > "${SCYLLA_CONFD_DIR}/dev-mode.conf"
 [[ -f "${SCYLLA_CONFD_DIR}/memory.conf" ]] || echo "# memory.conf" > "${SCYLLA_CONFD_DIR}/memory.conf"
-[[ -f "${SCYLLA_CONFD_DIR}/io.conf" ]] || echo "# io.conf" > "${SCYLLA_CONFD_DIR}/io.conf"
 [[ -f "${SCYLLA_CONFD_DIR}/cpuset.conf" ]] || echo "# cpuset.conf" > "${SCYLLA_CONFD_DIR}/cpuset.conf"
+
+# ── 8b) I/O scheduler configuration ─────────────────────────────────────────
+# The scylla-server deb ships /etc/scylla.d/dev-mode.conf and io.conf with
+# comment-only content — they are NOT functional as-is. ScyllaDB refuses to
+# start unless either:
+#   a) scylla_io_setup has run and written io_properties.yaml + active io.conf, OR
+#   b) DEV_MODE=--developer-mode=1 is set in dev-mode.conf.
+# We run scylla_io_setup for proper production I/O calibration; fall back to
+# developer mode if it is unavailable or fails (e.g., VM / limited disk space).
+_SCYLLA_IO_READY=false
+if [[ -f "${SCYLLA_CONFD_DIR}/io_properties.yaml" ]] && \
+   grep -qE "^SEASTAR_IO=" "${SCYLLA_CONFD_DIR}/io.conf" 2>/dev/null; then
+    _SCYLLA_IO_READY=true
+    echo "[scylladb/post-install] I/O scheduler already calibrated (io_properties.yaml present)"
+elif grep -qE "^DEV_MODE=--developer-mode=1" "${SCYLLA_CONFD_DIR}/dev-mode.conf" 2>/dev/null; then
+    _SCYLLA_IO_READY=true
+    echo "[scylladb/post-install] Developer mode already enabled"
+fi
+
+if [[ "${_SCYLLA_IO_READY}" == "false" ]]; then
+    if command -v scylla_io_setup &>/dev/null; then
+        echo "[scylladb/post-install] Running scylla_io_setup to calibrate I/O scheduler (may take a few minutes)..."
+        if scylla_io_setup 2>&1; then
+            echo "[scylladb/post-install] I/O scheduler calibrated"
+            _SCYLLA_IO_READY=true
+        else
+            echo "[scylladb/post-install] WARNING: scylla_io_setup failed — enabling developer mode as fallback"
+        fi
+    else
+        echo "[scylladb/post-install] scylla_io_setup not found — enabling developer mode as fallback"
+    fi
+fi
+
+if [[ "${_SCYLLA_IO_READY}" == "false" ]]; then
+    echo "DEV_MODE=--developer-mode=1" > "${SCYLLA_CONFD_DIR}/dev-mode.conf"
+    printf "" > "${SCYLLA_CONFD_DIR}/io.conf"
+    echo "[scylladb/post-install] Developer mode enabled"
+fi
 
 # ── 9) Systemd overrides ──────────────────────────────────────────────────────
 SCYLLA_OVERRIDE_DIR="${SCYLLA_OVERRIDE_DIR:-/etc/systemd/system/scylla-server.service.d}"
