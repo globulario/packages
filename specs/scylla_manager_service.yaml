@@ -56,13 +56,28 @@ steps:
         atomic: true
         content: |
           #!/bin/sh
-          # Generate scylla-manager config with the correct CQL host.
+          # Generate or patch scylla-manager config with the correct CQL host and HTTPS.
           # Reads ScyllaDB's listen address from its config; falls back
           # to detecting the address from the listening socket.
           CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"
+          CERT="{{.StateDir}}/pki/issued/services/service.crt"
+          KEY="{{.StateDir}}/pki/issued/services/service.key"
+
           if [ -f "$CFG" ]; then
-            exit 0   # skip if config already exists (user may have customised it)
+            # Config exists — patch in HTTPS block if missing
+            if ! grep -q "^https:" "$CFG"; then
+              HTTP_HOST=$(grep -E '^http:' "$CFG" | awk '{print $2}' | cut -d: -f1 | tr -d ' ')
+              if [ -n "$HTTP_HOST" ] && [ -f "$CERT" ] && [ -f "$KEY" ]; then
+                sed -i \
+                  -e "/^http:/a https: ${HTTP_HOST}:5443" \
+                  -e "/^https:/a tls_cert_file: $CERT" \
+                  -e "/^tls_cert_file:/a tls_key_file: $KEY" \
+                  "$CFG"
+              fi
+            fi
+            exit 0
           fi
+
           # 1) Try ScyllaDB's own config
           SCYLLA_CFG="/etc/scylla/scylla.yaml"
           CQL_HOST=""
@@ -79,10 +94,18 @@ steps:
             echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2
             exit 1
           fi
+          # Build TLS block only when certs exist
+          TLS_BLOCK=""
+          if [ -f "$CERT" ] && [ -f "$KEY" ]; then
+            TLS_BLOCK="https: ${CQL_HOST}:5443
+          tls_cert_file: $CERT
+          tls_key_file: $KEY
+          "
+          fi
           cat > "$CFG" <<EOCONF
           # Scylla Manager configuration (managed by Globular)
           http: ${CQL_HOST}:5080
-
+          ${TLS_BLOCK}
           database:
             hosts:
               - ${CQL_HOST}
@@ -112,7 +135,7 @@ steps:
           User=globular
           Group=globular
           ExecStartPre=/bin/sh -c 'for i in $(seq 1 90); do ss -lnt | grep -q ":9042 " && exit 0; sleep 1; done; echo "scylla 9042 not ready"; exit 1'
-          ExecStartPre=/bin/sh -c 'if [ -x "{{.Prefix}}/bin/scylla-manager-configure" ]; then exec "{{.Prefix}}/bin/scylla-manager-configure"; fi; CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"; [ -f "$CFG" ] && exit 0; SCYLLA_CFG="/etc/scylla/scylla.yaml"; CQL_HOST=""; if [ -f "$SCYLLA_CFG" ]; then CQL_HOST=$(grep -E "^rpc_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E "^listen_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); fi; if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then CQL_HOST=$(ss -lnt | awk "/:9042 /{split(\$4,a,\":\"); print a[1]; exit}"); fi; [ -n "$CQL_HOST" ] && [ "$CQL_HOST" != "127.0.0.1" ] || { echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2; exit 1; }; { printf "%s\n" "# Scylla Manager configuration (managed by Globular)" "http: ${CQL_HOST}:5080" "" "database:" "  hosts:" "    - ${CQL_HOST}" "  port: 9042"; } > "$CFG"; chown globular:globular "$CFG"; chmod 0640 "$CFG"'
+          ExecStartPre=/bin/sh -c 'if [ -x "{{.Prefix}}/bin/scylla-manager-configure" ]; then exec "{{.Prefix}}/bin/scylla-manager-configure"; fi; CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"; CERT="{{.StateDir}}/pki/issued/services/service.crt"; KEY="{{.StateDir}}/pki/issued/services/service.key"; if [ -f "$CFG" ]; then grep -q "^https:" "$CFG" || { H=$(grep -E "^http:" "$CFG" | awk "{print \$2}" | cut -d: -f1 | tr -d " "); [ -n "$H" ] && [ -f "$CERT" ] && [ -f "$KEY" ] && sed -i -e "/^http:/a https: ${H}:5443" -e "/^https:/a tls_cert_file: $CERT" -e "/^tls_cert_file:/a tls_key_file: $KEY" "$CFG"; }; exit 0; fi; SCYLLA_CFG="/etc/scylla/scylla.yaml"; CQL_HOST=""; if [ -f "$SCYLLA_CFG" ]; then CQL_HOST=$(grep -E "^rpc_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E "^listen_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); fi; if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then CQL_HOST=$(ss -lnt | awk "/:9042 /{split(\$4,a,\":\"); print a[1]; exit}"); fi; [ -n "$CQL_HOST" ] && [ "$CQL_HOST" != "127.0.0.1" ] || { echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2; exit 1; }; TLS_BLOCK=""; [ -f "$CERT" ] && [ -f "$KEY" ] && TLS_BLOCK=$(printf "https: ${CQL_HOST}:5443\ntls_cert_file: $CERT\ntls_key_file: $KEY\n"); { printf "%s\n" "# Scylla Manager configuration (managed by Globular)" "http: ${CQL_HOST}:5080"; [ -n "$TLS_BLOCK" ] && printf "%s\n" "$TLS_BLOCK"; printf "%s\n" "" "database:" "  hosts:" "    - ${CQL_HOST}" "  port: 9042"; } > "$CFG"; chown globular:globular "$CFG"; chmod 0640 "$CFG"'
           ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
           Restart=on-failure
           RestartSec=5
