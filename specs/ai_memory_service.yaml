@@ -38,7 +38,7 @@ steps:
         owner: globular
         group: globular
         mode: 0750
-      - path: "{{.StateDir}}/ai_memory"
+      - path: "{{.StateDir}}/ai-memory"
         owner: globular
         group: globular
         mode: 0750

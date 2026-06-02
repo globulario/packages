@@ -38,7 +38,7 @@ steps:
         owner: globular
         group: globular
         mode: 0750
-      - path: "{{.StateDir}}/ai_router"
+      - path: "{{.StateDir}}/ai-router"
         owner: globular
         group: globular
         mode: 0750

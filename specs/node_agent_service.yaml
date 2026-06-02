@@ -38,7 +38,7 @@ steps:
         owner: globular
         group: globular
         mode: 0750
-      - path: "{{.StateDir}}/node_agent"
+      - path: "{{.StateDir}}/node-agent"
         owner: globular
         group: globular
         mode: 0750
