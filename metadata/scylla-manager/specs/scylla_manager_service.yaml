@@ -79,9 +79,20 @@ steps:
             echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2
             exit 1
           fi
+          # TLS material — point scylla-manager at the Globular service
+          # cert + key so the HTTPS endpoint (:5443) is signed by the
+          # Globular Root CA. Without these two keys, scylla-manager
+          # auto-generates an O=Scylla self-signed cert and the cluster-
+          # doctor scylla_manager.cluster_registered rule fails verify.
+          # Live regression observed 2026-06-03.
+          TLS_CERT="{{.StateDir}}/pki/issued/services/service.crt"
+          TLS_KEY="{{.StateDir}}/pki/issued/services/service.key"
           cat > "$CFG" <<EOCONF
           # Scylla Manager configuration (managed by Globular)
           http: ${CQL_HOST}:5080
+          https: ${CQL_HOST}:5443
+          tls_cert_file: ${TLS_CERT}
+          tls_key_file: ${TLS_KEY}
 
           database:
             hosts:
