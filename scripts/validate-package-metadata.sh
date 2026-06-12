@@ -50,7 +50,6 @@ declare -A CATALOG_KIND=(
   [gateway]=infrastructure      [envoy]=infrastructure
   [prometheus]=infrastructure   [alertmanager]=infrastructure
   [node-exporter]=infrastructure [scylla-manager]=infrastructure
-  [oxigraph]=infrastructure
   [scylla-manager-agent]=infrastructure [sidekick]=infrastructure
   [keepalived]=infrastructure
 
@@ -71,7 +70,7 @@ declare -A CATALOG_KIND=(
   [node-agent]=service          [ai-memory]=service
   [ai-executor]=service         [ai-router]=service
   [ai-watcher]=service          [workflow]=service
-  [mcp]=service                [awareness-graph]=service
+  [mcp]=service
 
   # KindCommand
   [rclone]=command  [restic]=command  [sctool]=command
