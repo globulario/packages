@@ -148,12 +148,31 @@ if [[ -z "${SCYLLA_CLUSTER_FINGERPRINT}" ]]; then
     fi
 fi
 
-# ── 4b) Auto-detect Day-1 join context from node-agent state when env not set ─
-# The node-agent writes join_id to state.json for the duration of an active
-# join and clears+saves it after completion. A non-empty join_id here means
-# this post-install is part of a live Day-1 join, not an upgrade.
+# ── 4b) Auto-detect Day-1 join context ─────────────────────────────────────────
+# Three detection mechanisms, checked in order:
+#
+#   1. GLOBULAR_JOIN_ACTIVE=true — set by the node-agent process when it
+#      started with join credentials. This is the most reliable signal because
+#      it survives the credential-clearing in applyApprovedNodeID (which runs
+#      before infrastructure packages are installed).
+#
+#   2. join_id in state.json — the original detection path. Works when the
+#      post-install runs before join approval clears the credentials.
+#
+#   3. join_authorize.json — the join plan written by the gateway join script
+#      in Phase 3.6. Contains join_id even after state.json is cleared.
+#
 if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
-    # Use canonical node-agent path (hyphen); fall back to legacy nodeagent alias.
+    # Signal 1: environment variable from node-agent (most reliable).
+    if [[ "${GLOBULAR_JOIN_ACTIVE:-}" == "true" ]]; then
+        SCYLLA_INSTALL_INTENT="fresh-join"
+        ALLOW_STALE_SCYLLA_REINIT_ON_JOIN="true"
+        echo "[scylladb/post-install] Auto-detected Day-1 join context (GLOBULAR_JOIN_ACTIVE=true)"
+    fi
+fi
+
+if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
+    # Signal 2: join_id in state.json (may be cleared after join approval).
     if [[ -f "${STATE_DIR}/node-agent/state.json" ]]; then
         STATE_JSON="${STATE_DIR}/node-agent/state.json"
     else
@@ -167,6 +186,21 @@ if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
             echo "[scylladb/post-install] Auto-detected Day-1 join context (join_id=${JOIN_ID_VAL})"
         fi
     fi
+fi
+
+if [[ "${SCYLLA_INSTALL_INTENT}" == "preserve" ]]; then
+    # Signal 3: join_authorize.json from the gateway join script.
+    for _auth_path in "${STATE_DIR}/nodeagent/join_authorize.json" "${STATE_DIR}/node-agent/join_authorize.json"; do
+        if [[ -f "${_auth_path}" ]]; then
+            JOIN_ID_VAL=$(grep -oP '"join_id"\s*:\s*"\K[^"]+' "${_auth_path}" 2>/dev/null || echo "")
+            if [[ -n "${JOIN_ID_VAL}" ]]; then
+                SCYLLA_INSTALL_INTENT="fresh-join"
+                ALLOW_STALE_SCYLLA_REINIT_ON_JOIN="true"
+                echo "[scylladb/post-install] Auto-detected Day-1 join context (join_authorize.json join_id=${JOIN_ID_VAL})"
+                break
+            fi
+        fi
+    done
 fi
 
 # ── 5) Detect existing Raft/topology state ────────────────────────────────────

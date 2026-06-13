@@ -392,6 +392,57 @@ assert_exit "bootstrap-intent exits 0" 0 "${rc}" "${output}"
 teardown
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TEST 11: GLOBULAR_JOIN_ACTIVE=true triggers fresh-join even without state.json join_id.
+# This tests the primary fix for the INC where join credentials are cleared
+# from state.json by applyApprovedNodeID BEFORE infrastructure packages install.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "Test 11: GLOBULAR_JOIN_ACTIVE env var triggers fresh-join (no join_id in state)"
+setup
+create_raft_state
+write_ownership "stale0000fingerprint"
+inject_remote_seed "10.0.0.1"
+# No join_id in state.json — mimics the post-approval state.
+mkdir -p "${TMP_ROOT}/node-agent"
+cat > "${TMP_ROOT}/node-agent/state.json" <<JSON
+{"node_id": "test-node-01"}
+JSON
+# GLOBULAR_JOIN_ACTIVE=true from node-agent parent process.
+rc=0; output=$(run_script \
+    "SCYLLA_INSTALL_INTENT=preserve" \
+    "GLOBULAR_JOIN_ACTIVE=true") || rc=$?
+assert_exit "env-var-join exits 0" 0 "${rc}" "${output}"
+assert_dir_absent "topology dir wiped via env var" \
+    "${TMP_ROOT}/scylla/data/system/topology-abc123"
+assert_dir_absent "raft dir wiped via env var" \
+    "${TMP_ROOT}/scylla/data/system/raft-def456"
+teardown
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 12: join_authorize.json triggers fresh-join as fallback.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "Test 12: join_authorize.json fallback triggers fresh-join"
+setup
+create_raft_state
+write_ownership "stale0000fingerprint"
+inject_remote_seed "10.0.0.1"
+# state.json has no join_id (cleared after approval).
+mkdir -p "${TMP_ROOT}/node-agent"
+cat > "${TMP_ROOT}/node-agent/state.json" <<JSON
+{"node_id": "test-node-01"}
+JSON
+# join_authorize.json from the gateway join script still has join_id.
+cat > "${TMP_ROOT}/nodeagent/join_authorize.json" <<JSON
+{"allowed": true, "join_id": "76cc80d1-test-join-id"}
+JSON
+rc=0; output=$(run_script "SCYLLA_INSTALL_INTENT=preserve") || rc=$?
+assert_exit "authorize-fallback exits 0" 0 "${rc}" "${output}"
+assert_dir_absent "topology dir wiped via authorize fallback" \
+    "${TMP_ROOT}/scylla/data/system/topology-abc123"
+teardown
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
