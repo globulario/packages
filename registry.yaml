@@ -340,7 +340,7 @@ packages:
 
   - name: claude
     kind: command
-    binary: claude
+    binary: noop
     go_target: ""
     version_source: self
     publisher_id: core@globular.io

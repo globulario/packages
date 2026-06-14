@@ -6,8 +6,13 @@ package_kind: command
 summary: >
   Claude CLI binary. A standalone command-line tool invoked by operators or AI
   services. Has no systemd unit, owns no etcd keys, and manages no cluster state.
-  Must be executed only within the node-agent supervisor boundary. Integrity is
-  enforced by checksum validation at install time.
+  Must be executed only within the node-agent supervisor boundary. Wrapper package:
+  the ~250MB proprietary binary is NOT shipped in the payload — the payload carries
+  only the shared `noop` sentinel for the verifier. The real binary is fetched at
+  install time (scripts/install-claude.sh) from Anthropic's release CDN and verified
+  against BOTH the per-version manifest checksum and a pinned sha256 before being
+  installed to /usr/local/bin/claude. Because that path is outside /usr/lib/globular/bin,
+  the node-agent binary-hash verifier skips it (registry skip_runtime_check: true).
 
 owns:
   etcd_keys: []
@@ -39,10 +44,20 @@ forbidden_fixes:
 known_failure_modes:
   - id: binary_checksum_mismatch
     description: >
-      If the installed binary checksum does not match the repository manifest,
-      the command is considered corrupted and must be reinstalled.
-    diagnosis: "sha256sum /usr/local/bin/claude; compare against package manifest."
-    remedy: "Reinstall via node-agent package install workflow."
+      If a freshly downloaded binary does not match the pinned/manifest checksum,
+      the install fails closed and never overwrites a working binary.
+    diagnosis: "sha256sum /usr/local/bin/claude; compare against scripts/install-claude.sh CLAUDE_EXPECTED_SHA256 and the per-version manifest."
+    remedy: "Reinstall via node-agent package install workflow (re-runs install-claude.sh)."
+  - id: self_referential_stub_clobber
+    description: >
+      Historical bug: the package shipped a 58-byte stub payload (exec
+      /usr/lib/globular/bin/claude) installed AS /usr/lib/globular/bin/claude, plus
+      a wrapper that overwrote /usr/local/bin/claude to exec that stub — an
+      exec-loop that destroyed any real binary on every reconcile. Fixed by the
+      wrapper/fetch model: the spec must NEVER install a stub to the entrypoint
+      path, and must never overwrite /usr/local/bin/claude with a wrapper.
+    diagnosis: "ls -l /usr/local/bin/claude (a ~60-byte file is the broken stub, not the real ~250MB binary)."
+    remedy: "Re-run install-claude.sh; it fetches and verifies the real binary."
 
 safe_degraded_modes:
   - "If claude binary is unavailable, the cluster continues operating; only AI operator tooling is impacted."
