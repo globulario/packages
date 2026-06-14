@@ -4,7 +4,7 @@
   "version": "0.0.3",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/mcp",
+  "entrypoint": "bin/mcp_server",
   "defaults": {
     "configDir": "",
     "spec": "specs/mcp_service.yaml"
