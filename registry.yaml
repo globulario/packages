@@ -571,7 +571,7 @@ packages:
 
   - name: mcp
     kind: service
-    binary: mcp
+    binary: mcp_server
     go_target: mcp
     version_source: platform
     publisher_id: core@globular.io

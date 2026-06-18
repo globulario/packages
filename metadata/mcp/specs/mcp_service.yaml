@@ -149,7 +149,7 @@ steps:
     services:
       - globular-mcp.service
     binaries:
-      globular-mcp.service: mcp
+      globular-mcp.service: mcp_server
 
   - id: health-mcp
     type: health_checks
