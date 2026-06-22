@@ -3,7 +3,7 @@ version: 1
 metadata:
   name: mcp
   version: "0.0.3"
-  kind: infrastructure
+  kind: service
   description: "MCP (Model Context Protocol) server exposing read-only Globular operator tools to AI assistants like Claude Code."
   keywords: [mcp, ai, claude, operator, diagnostics, tools]
   license: Apache-2.0
