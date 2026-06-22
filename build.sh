@@ -32,6 +32,13 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
+# Identity gate: every package's binary name + kind MUST agree across registry.yaml,
+# package.json, every spec (top-level specs/ AND metadata/*/specs/), and the systemd
+# unit before a single package is built. Guards against the recurring mcp "mcp" vs
+# "mcp_server" drift (fixed by hand 5+ times). Fail loud, never ship.
+echo "→ Validating package identity (registry.yaml is authority)..."
+python3 "${PKGS_ROOT}/scripts/validate-package-identity.py" --repo-root "${PKGS_ROOT}"
+
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 

@@ -3,7 +3,7 @@ version: 1
 metadata:
   name: xds
   version: "0.0.1"
-  kind: service
+  kind: infrastructure
   description: "xDS control plane that provides dynamic Envoy configuration for service discovery and routing."
   keywords: [xds, envoy, service-discovery, control-plane, routing]
   license: MIT
