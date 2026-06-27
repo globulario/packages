@@ -13,20 +13,19 @@
 #   version_source       — platform (stamped from release tag) | self (binary reports own version)
 #   publisher_id         — artifact publisher (default: core@globular.io)
 #   control_plane_critical — true if required before workloads can start.
-#                          NON-AUTHORITATIVE OVERLAY (semantic debt, ai-memory
-#                          architecture/b3ae1cce) — see the profiles note below.
+#                          NON-AUTHORITATIVE OVERLAY: component_catalog (services repo) is
+#                          the placement/criticality authority; this field is not yet wired.
+#                          Tracked debt: ai-memory architecture/b3ae1cce.
 #   day0_required        — true if must be installed during Day-0 bootstrap
 #   day1_join_required   — true if must be present before a joining node can operate
 #   skip_runtime_check   — true for command-like packages with no systemd unit
 #   bootstrap_tier       — foundation | core_control | supporting | workload
-#   profiles             — node profiles that include this package.
-#                          NON-AUTHORITATIVE OVERLAY: the services-repo component_catalog
-#                          is the placement authority (see invariant
-#                          publish.manifest_profiles_must_not_contradict_catalog). This
-#                          field is NOT wired into placement and may be vestigial —
-#                          values are kept aligned with the catalog as a courtesy, not an
-#                          authority. Tracked debt: ai-memory architecture/b3ae1cce.
 #   provides             — gRPC service IDs this package exposes
+#
+#   NOTE: the `profiles` field was REMOVED (it was a non-authoritative, unconsumed
+#   overlay — genkinds never projected it and nothing read it for placement). Node
+#   placement is owned by the services-repo component_catalog (invariant
+#   publish.manifest_profiles_must_not_contradict_catalog). Resolved debt b3ae1cce.
 #   requires             — gRPC service IDs this package depends on
 #   hard_deps            — packages that must be installed first
 #
@@ -53,7 +52,6 @@ packages:
     day1_join_required: true
     skip_runtime_check: false
     bootstrap_tier: foundation
-    profiles: [core]
     provides: []
     requires: []
     hard_deps: []
@@ -70,7 +68,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: foundation
-    profiles: [core]
     provides: []
     requires: [etcd]
     hard_deps: [etcd]
@@ -87,7 +84,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: foundation
-    profiles: [storage]
     provides: []
     requires: [etcd]
     hard_deps: [etcd]
@@ -104,7 +100,6 @@ packages:
     day1_join_required: true
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [xds]
     hard_deps: [xds]
@@ -121,7 +116,6 @@ packages:
     day1_join_required: true
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [etcd]
     hard_deps: [etcd]
@@ -138,7 +132,6 @@ packages:
     day1_join_required: true
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [etcd, xds]
     hard_deps: [etcd, xds]
@@ -155,7 +148,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [gateway]
     provides: []
     requires: []
     hard_deps: []
@@ -172,7 +164,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: []
     hard_deps: []
@@ -189,7 +180,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [prometheus]
     hard_deps: []
@@ -206,7 +196,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: []
     hard_deps: []
@@ -223,7 +212,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [storage]
     provides: []
     requires: [minio]
     hard_deps: [minio]
@@ -240,7 +228,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [scylladb]
     hard_deps: [scylladb]
@@ -257,7 +244,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: []
     requires: [scylladb]
     hard_deps: [scylladb]
@@ -274,7 +260,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: restic
     kind: command
@@ -284,7 +269,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: rclone
     kind: command
@@ -294,7 +278,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: ffmpeg
     kind: command
@@ -304,7 +287,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [media-server]
 
   - name: mc
     kind: command
@@ -314,7 +296,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: sctool
     kind: command
@@ -324,7 +305,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: sha256sum
     kind: command
@@ -334,7 +314,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: yt-dlp
     kind: command
@@ -344,7 +323,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [media-server]
 
   - name: claude
     kind: command
@@ -354,7 +332,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   - name: globular-cli
     kind: command
@@ -364,7 +341,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
 
   # ════════════════════════════════════════════════════════════════════════════
   # SERVICES — Core control plane
@@ -381,7 +357,6 @@ packages:
     day1_join_required: true
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [node_agent.NodeAgentService]
     requires: [etcd]
     hard_deps: [etcd]
@@ -397,7 +372,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [control-plane]
     provides: [cluster_controller.ClusterControllerService]
     requires: [etcd, repository, workflow]
     hard_deps: [etcd]
@@ -413,7 +387,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [control-plane]
     provides: [cluster_doctor.ClusterDoctorService]
     requires: [etcd]
     hard_deps: [etcd]
@@ -429,7 +402,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [workflow.WorkflowService]
     requires: [etcd]
     hard_deps: [etcd]
@@ -445,7 +417,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [repository.PackageRepository]
     requires: [etcd, minio, scylladb]
     hard_deps: [etcd, minio]
@@ -461,7 +432,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [authentication.AuthenticationService]
     requires: [etcd]
 
@@ -476,7 +446,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [rbac.RbacService]
     requires: [etcd, scylladb]
 
@@ -491,7 +460,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [resource.ResourceService]
     requires: [etcd, scylladb]
 
@@ -506,7 +474,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [discovery.DiscoveryService]
     requires: [etcd]
 
@@ -521,7 +488,6 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: core_control
-    profiles: [core]
     provides: [dns.DnsService]
     requires: [etcd, scylladb]
 
@@ -537,7 +503,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: [event.EventService]
     requires: [etcd, scylladb]
 
@@ -549,7 +514,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: [log.LogService]
     requires: [etcd]
 
@@ -561,7 +525,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
-    profiles: [core]
     provides: [monitoring.MonitoringService]
     requires: [etcd, prometheus]
 
@@ -573,7 +536,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [backup.BackupService]
     requires: [etcd, scylladb, minio]
 
@@ -585,7 +547,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: []
     requires: [etcd]
 
@@ -601,7 +562,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [ai_executor.AiExecutorService]
     requires: [etcd, scylladb]
 
@@ -613,7 +573,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [ai_memory.AiMemoryService]
     requires: [etcd, scylladb]
 
@@ -625,7 +584,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [ai_router.AiRouterService]
     requires: [etcd]
 
@@ -637,7 +595,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [ai_watcher.AiWatcherService]
     requires: [etcd, event]
 
@@ -653,7 +610,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [file.FileService]
     requires: [etcd, minio]
 
@@ -665,7 +621,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [persistence.PersistenceService]
     requires: [etcd, scylladb]
 
@@ -677,7 +632,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [search.SearchService]
     requires: [etcd, scylladb]
 
@@ -689,7 +643,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [media-server]
     provides: [title.TitleService]
     requires: [etcd, scylladb]
 
@@ -701,7 +654,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [media-server]
     provides: [media.MediaService]
     requires: [etcd, minio, ffmpeg]
 
@@ -713,7 +665,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [blog.BlogService]
     requires: [etcd, scylladb]
 
@@ -725,7 +676,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [catalog.CatalogService]
     requires: [etcd, scylladb]
 
@@ -737,7 +687,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [conversation.ConversationService]
     requires: [etcd, scylladb]
 
@@ -749,7 +698,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [echo.EchoService]
     requires: [etcd]
 
@@ -761,7 +709,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [ldap.LdapService]
     requires: [etcd]
 
@@ -773,7 +720,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [mail.MailService]
     requires: [etcd]
 
@@ -785,7 +731,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [sql.SqlService]
     requires: [etcd]
 
@@ -797,7 +742,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
     provides: [storage.StorageService]
     requires: [etcd, minio]
 
@@ -809,6 +753,5 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [media-server]
     provides: [torrent.TorrentService]
     requires: [etcd]
