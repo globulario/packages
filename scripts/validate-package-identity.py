@@ -17,8 +17,11 @@ The drift hid because the two spec copies (top-level specs/ vs metadata/<name>/s
 disagreed: the build read one, the fix landed in the other.
 
 This gate is LAYOUT-AGNOSTIC: it checks EVERY spec file that exists, wherever it lives,
-plus package.json and the systemd unit, against registry.yaml. registry.yaml is the
-authority and is itself cross-checked against the canonical component_catalog.go kinds.
+plus package.json, awareness.yaml, and the systemd unit, against registry.yaml.
+registry.yaml is the SOLE author of kind; this gate is source-vs-mirror. The former
+CATALOG_KIND photocopy (a hand-mirror of component_catalog.go) was REMOVED (Slice 2) —
+the registry↔component_catalog kind agreement is enforced services-side by
+`make check-package-kinds` + package_kind_registry_consistency_test.go, not duplicated here.
 Any disagreement fails the build loud.
 
 Do NOT relax a check to make a build pass, and never edit registry.yaml to match a
@@ -38,34 +41,16 @@ import yaml
 
 VALID_KINDS = {"service", "infrastructure", "command", "application"}
 
-# Canonical runtime classification — MUST mirror component_catalog.go
-# (KindInfrastructure / KindWorkload→"service" / KindCommand). registry.yaml is
-# validated against this so the registry itself cannot silently drift.
-CATALOG_KIND = {
-    # infrastructure
-    "etcd": "infrastructure", "minio": "infrastructure", "scylladb": "infrastructure",
-    "xds": "infrastructure", "gateway": "infrastructure", "envoy": "infrastructure",
-    "prometheus": "infrastructure", "alertmanager": "infrastructure",
-    "node-exporter": "infrastructure", "scylla-manager": "infrastructure",
-    "scylla-manager-agent": "infrastructure", "sidekick": "infrastructure",
-    "keepalived": "infrastructure",
-    # service (KindWorkload)
-    "dns": "service", "discovery": "service", "event": "service", "rbac": "service",
-    "file": "service", "monitoring": "service", "authentication": "service",
-    "resource": "service", "persistence": "service", "sql": "service",
-    "storage": "service", "repository": "service", "catalog": "service",
-    "search": "service", "log": "service", "ldap": "service", "mail": "service",
-    "blog": "service", "conversation": "service", "title": "service",
-    "media": "service", "torrent": "service", "echo": "service",
-    "backup-manager": "service", "cluster-controller": "service",
-    "cluster-doctor": "service", "node-agent": "service", "ai-memory": "service",
-    "ai-executor": "service", "ai-router": "service", "ai-watcher": "service",
-    "workflow": "service", "mcp": "service",
-    # command
-    "rclone": "command", "restic": "command", "sctool": "command", "mc": "command",
-    "ffmpeg": "command", "etcdctl": "command", "sha256sum": "command",
-    "yt-dlp": "command", "globular-cli": "command", "claude": "command",
-}
+# Kind authority (Slice 2): registry.yaml.kind is the SOLE author. The former
+# CATALOG_KIND dict (a photocopy of component_catalog.go, "MUST mirror …") lived here
+# and was itself one of the drifting copies of "kind" — it has been REMOVED so the
+# guardian cannot hold a photocopy. This gate validates the packages-repo MIRRORS
+# (package.json type, awareness.yaml package_kind, spec metadata.kind, systemd binary)
+# DIRECTLY against registry.yaml (source-vs-mirror). The registry↔component_catalog.go
+# agreement is enforced services-side (make check-package-kinds +
+# package_kind_registry_consistency_test.go). Do NOT reintroduce a hardcoded kind map
+# (forbidden_fix: hardcode_package_kind_classification_outside_canonical_registry).
+# See services docs/design/package-classification-single-source.md.
 
 EXECSTART_BIN_RE = re.compile(r"ExecStart\s*=\s*\S*?/bin/([A-Za-z0-9_.-]+)")
 PKILL_X_RE = re.compile(r"pkill\b[^\n]*?-x\s+([A-Za-z0-9_.-]+)")
@@ -152,14 +137,12 @@ def main():
     print(f"repo-root: {repo_root}")
     print(f"registry:  {len(registry)} packages\n")
 
-    # registry.yaml must match the canonical catalog.
+    # registry.yaml is the SOLE author of kind — validate only that it is a known kind.
+    # (The former registry-vs-CATALOG_KIND photocopy check was removed in Slice 2; the
+    # registry↔component_catalog.go agreement is enforced services-side.)
     for name, reg in registry.items():
         if reg["kind"] and reg["kind"] not in VALID_KINDS:
             fail(errors, f"{name}: registry.yaml kind '{reg['kind']}' is not valid {sorted(VALID_KINDS)}")
-        cat = CATALOG_KIND.get(name)
-        if cat and reg["kind"] and reg["kind"] != cat:
-            fail(errors, f"{name}: registry.yaml kind='{reg['kind']}' disagrees with the canonical "
-                         f"catalog (component_catalog.go) kind='{cat}'. Reconcile both.")
 
     # Every spec file, wherever it lives (top-level specs/ AND metadata/*/specs/),
     # is checked against registry by its own declared metadata.name.
@@ -197,6 +180,18 @@ def main():
                 pj_type = (pj.get("type") or "").strip().lower()
                 if want_kind and pj_type and pj_type != want_kind:
                     fail(errors, f"{name}: kind mismatch — package.json.type='{pj_type}' "
+                                 f"vs registry.yaml kind='{want_kind}'.")
+            # awareness.yaml package_kind mirror (copy #3) — gated against registry.
+            aw_path = os.path.join(meta_root, name, "awareness.yaml")
+            if os.path.isfile(aw_path):
+                try:
+                    aw = yaml.safe_load(open(aw_path)) or {}
+                except Exception as exc:  # noqa: BLE001 - report and continue
+                    aw = {}
+                    fail(errors, f"{name}: cannot parse awareness.yaml: {exc}")
+                aw_kind = str(aw.get("package_kind") or "").strip().lower()
+                if want_kind and aw_kind and aw_kind != want_kind:
+                    fail(errors, f"{name}: kind mismatch — awareness.yaml package_kind='{aw_kind}' "
                                  f"vs registry.yaml kind='{want_kind}'.")
             unit_dir = os.path.join(meta_root, name, "systemd")
             if os.path.isdir(unit_dir) and want_bin:
