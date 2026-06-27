@@ -4,7 +4,7 @@ metadata:
   name: mcp
   # Placeholder only — the platform version is injected at build (version_source:
   # platform in registry.yaml). Never hardcode a release version here.
-  version: "0.0.1"
+  version: "0.0.3"
   kind: service
   description: "MCP (Model Context Protocol) server exposing read-only Globular operator tools to AI assistants like Claude Code."
   keywords: [mcp, ai, claude, operator, diagnostics, tools]
