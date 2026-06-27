@@ -12,12 +12,20 @@
 #   systemd_unit         — systemd unit name (default: globular-{name}.service)
 #   version_source       — platform (stamped from release tag) | self (binary reports own version)
 #   publisher_id         — artifact publisher (default: core@globular.io)
-#   control_plane_critical — true if required before workloads can start
+#   control_plane_critical — true if required before workloads can start.
+#                          NON-AUTHORITATIVE OVERLAY (semantic debt, ai-memory
+#                          architecture/b3ae1cce) — see the profiles note below.
 #   day0_required        — true if must be installed during Day-0 bootstrap
 #   day1_join_required   — true if must be present before a joining node can operate
 #   skip_runtime_check   — true for command-like packages with no systemd unit
 #   bootstrap_tier       — foundation | core_control | supporting | workload
-#   profiles             — list of node profiles that require this package
+#   profiles             — node profiles that include this package.
+#                          NON-AUTHORITATIVE OVERLAY: the services-repo component_catalog
+#                          is the placement authority (see invariant
+#                          publish.manifest_profiles_must_not_contradict_catalog). This
+#                          field is NOT wired into placement and may be vestigial —
+#                          values are kept aligned with the catalog as a courtesy, not an
+#                          authority. Tracked debt: ai-memory architecture/b3ae1cce.
 #   provides             — gRPC service IDs this package exposes
 #   requires             — gRPC service IDs this package depends on
 #   hard_deps            — packages that must be installed first
@@ -296,7 +304,7 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
+    profiles: [media-server]
 
   - name: mc
     kind: command
@@ -336,7 +344,7 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
-    profiles: [core]
+    profiles: [media-server]
 
   - name: claude
     kind: command
@@ -681,7 +689,7 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
+    profiles: [media-server]
     provides: [title.TitleService]
     requires: [etcd, scylladb]
 
@@ -693,7 +701,7 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
+    profiles: [media-server]
     provides: [media.MediaService]
     requires: [etcd, minio, ffmpeg]
 
@@ -801,6 +809,6 @@ packages:
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
-    profiles: [core]
+    profiles: [media-server]
     provides: [torrent.TorrentService]
     requires: [etcd]
