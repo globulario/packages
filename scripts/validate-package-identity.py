@@ -38,37 +38,17 @@ import yaml
 
 VALID_KINDS = {"service", "infrastructure", "command", "application"}
 
-# Canonical runtime classification — MUST mirror component_catalog.go
-# (KindInfrastructure / KindWorkload→"service" / KindCommand) in the services repo.
-# registry.yaml is validated against this so the registry itself cannot silently
-# drift from the runtime classifier. Infrastructure = third-party / non-mesh
-# daemon (etcd, envoy, xds, gateway, prometheus, scylla, minio, keepalived).
-# Service = a Globular Go workload. Command = CLI tool.
-CATALOG_KIND = {
-    # infrastructure
-    "etcd": "infrastructure", "minio": "infrastructure", "scylladb": "infrastructure",
-    "xds": "infrastructure", "gateway": "infrastructure", "envoy": "infrastructure",
-    "prometheus": "infrastructure", "alertmanager": "infrastructure",
-    "node-exporter": "infrastructure", "scylla-manager": "infrastructure",
-    "scylla-manager-agent": "infrastructure", "sidekick": "infrastructure",
-    "keepalived": "infrastructure",
-    # service (KindWorkload)
-    "dns": "service", "discovery": "service", "event": "service", "rbac": "service",
-    "file": "service", "monitoring": "service", "authentication": "service",
-    "resource": "service", "persistence": "service", "sql": "service",
-    "storage": "service", "repository": "service", "catalog": "service",
-    "search": "service", "log": "service", "ldap": "service", "mail": "service",
-    "blog": "service", "conversation": "service", "title": "service",
-    "media": "service", "torrent": "service", "echo": "service",
-    "backup-manager": "service", "cluster-controller": "service",
-    "cluster-doctor": "service", "node-agent": "service", "ai-memory": "service",
-    "ai-executor": "service", "ai-router": "service", "ai-watcher": "service",
-    "workflow": "service", "mcp": "service",
-    # command
-    "rclone": "command", "restic": "command", "sctool": "command", "mc": "command",
-    "ffmpeg": "command", "etcdctl": "command", "sha256sum": "command",
-    "yt-dlp": "command", "globular-cli": "command", "claude": "command",
-}
+# NOTE (package-classification single-source, Slice 2): the former hardcoded
+# CATALOG_KIND map lived here as a *photocopy* of component_catalog.go ("MUST mirror
+# component_catalog.go") — itself one of the eight drifting copies of "kind". It has
+# been REMOVED. registry.yaml is the single author; the registry-vs-runtime-classifier
+# (component_catalog.go) check now lives mechanically in the services repo as
+# TestComponentCatalogKindMatchesRegistry, which compares component_catalog.go against a
+# build-time projection of THIS registry.yaml (golang/packagekind). This validator keeps
+# enforcing that the packages-repo COPIES — package.json type, awareness.yaml
+# package_kind, spec metadata.kind, systemd binary — agree with registry.yaml.
+# See docs/design/package-classification-single-source.md (services repo).
+# Do NOT reintroduce a hardcoded kind map here (forbidden_fix in the scar).
 
 # Binary references inside a spec/unit live in literal block scalars, so they are
 # extracted from raw text rather than the parsed YAML tree.
@@ -178,11 +158,8 @@ def main():
         want_kind = reg["kind"]
         if want_kind and want_kind not in VALID_KINDS:
             fail(errors, f"{name}: registry.yaml kind '{want_kind}' is not valid {sorted(VALID_KINDS)}")
-        # registry.yaml must match the canonical runtime classifier.
-        cat_kind = CATALOG_KIND.get(name)
-        if cat_kind and want_kind and want_kind != cat_kind:
-            fail(errors, f"{name}: registry.yaml kind='{want_kind}' disagrees with the canonical "
-                         f"catalog (component_catalog.go) kind='{cat_kind}'. Reconcile both.")
+        # (registry-vs-component_catalog.go cross-check moved to the services repo:
+        # TestComponentCatalogKindMatchesRegistry — see the CATALOG_KIND removal note above.)
 
         # --- package.json ---
         pj_path = os.path.join(pkg_dir, "package.json")
@@ -194,6 +171,19 @@ def main():
                 check_binary(errors, name, "package.json.entrypoint", pj_bin, want_bin)
             if want_kind and pj_type and pj_type != want_kind:
                 fail(errors, f"{name}: kind mismatch — package.json.type='{pj_type}' "
+                             f"vs registry.yaml kind='{want_kind}'.")
+
+        # --- awareness.yaml (package_kind, copy #3 — previously ungated) ---
+        aw_path = os.path.join(pkg_dir, "awareness.yaml")
+        if os.path.isfile(aw_path):
+            try:
+                aw = yaml.safe_load(open(aw_path)) or {}
+            except Exception as exc:  # noqa: BLE001 - report and continue
+                aw = {}
+                fail(errors, f"{name}: cannot parse awareness.yaml: {exc}")
+            aw_kind = str(aw.get("package_kind") or "").strip().lower()
+            if want_kind and aw_kind and aw_kind != want_kind:
+                fail(errors, f"{name}: kind mismatch — awareness.yaml package_kind='{aw_kind}' "
                              f"vs registry.yaml kind='{want_kind}'.")
 
         # --- spec ---
