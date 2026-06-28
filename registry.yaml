@@ -333,6 +333,17 @@ packages:
     skip_runtime_check: true
     bootstrap_tier: workload
 
+  - name: codex
+    kind: command
+    binary: noop
+    go_target: ""
+    version_source: self
+    publisher_id: core@globular.io
+    day0_required: true
+    day1_join_required: true
+    skip_runtime_check: true
+    bootstrap_tier: workload
+
   - name: globular-cli
     kind: command
     binary: globular
@@ -463,20 +474,6 @@ packages:
     provides: [resource.ResourceService]
     requires: [etcd, scylladb]
 
-  - name: discovery
-    kind: service
-    binary: discovery_server
-    go_target: discovery/discovery_server
-    version_source: platform
-    publisher_id: core@globular.io
-    control_plane_critical: false
-    day0_required: false
-    day1_join_required: false
-    skip_runtime_check: false
-    bootstrap_tier: core_control
-    provides: [discovery.DiscoveryService]
-    requires: [etcd]
-
   - name: dns
     kind: service
     binary: dns_server
@@ -564,6 +561,7 @@ packages:
     bootstrap_tier: workload
     provides: [ai_executor.AiExecutorService]
     requires: [etcd, scylladb]
+    hard_deps: [claude, codex]
 
   - name: ai-memory
     kind: service

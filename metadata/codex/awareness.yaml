@@ -1,0 +1,73 @@
+apiVersion: awareness.globular.io/v1
+kind: AwarenessContract
+service: codex
+package: codex
+package_kind: command
+summary: >
+  Codex CLI binary. A standalone command-line tool invoked by operators or AI
+  services. Has no systemd unit, owns no etcd keys, and manages no cluster state.
+  Must be executed only within the node-agent supervisor boundary. Wrapper package:
+  the real vendor tree is NOT shipped in the payload — the payload carries only
+  the shared `noop` sentinel for the verifier. The real CLI is fetched at install
+  time (scripts/install-codex.sh) from the pinned npm registry tarball, verified
+  against a pinned sha512, installed under /usr/local/lib/codex/<platform>, and
+  exposed via /usr/local/bin/codex.
+
+owns:
+  etcd_keys: []
+  systemd_units: []
+  filesystem_paths:
+    - /usr/local/bin/codex
+    - /usr/local/lib/codex
+  event_types: []
+
+reads:
+  etcd_keys: []
+
+writes:
+  etcd_keys: []
+
+depends_on: []
+
+emits: []
+
+subscribes: []
+
+invariants:
+  - command.checksum_must_match_installed
+  - command.execution_within_supervisor_only
+
+forbidden_fixes:
+  - execute_outside_node_agent_supervisor
+  - store_tokens_in_source_code
+
+known_failure_modes:
+  - id: tarball_checksum_mismatch
+    description: >
+      If the downloaded npm tarball does not match the pinned sha512, the
+      install fails closed and never overwrites a working binary.
+    diagnosis: "sha512sum /tmp/codex*.tgz; compare against scripts/install-codex.sh CODEX_X64_SHA512/CODEX_ARM64_SHA512."
+    remedy: "Reinstall via node-agent package install workflow (re-runs install-codex.sh)."
+  - id: broken_vendor_tree_layout
+    description: >
+      Codex relies on adjacent resources (rg, bwrap, zsh, codex-package.json).
+      Installing only the leaf binary without the vendor tree leaves the CLI
+      present but broken at runtime.
+    diagnosis: "ls -R /usr/local/lib/codex; verify <platform>/bin/codex and sibling resources exist."
+    remedy: "Re-run install-codex.sh; it reinstalls the full vendor tree and refreshes the /usr/local/bin/codex symlink."
+
+safe_degraded_modes:
+  - "If codex binary is unavailable, the cluster continues operating; only AI operator tooling and Codex-backed ai-executor prompts are impacted."
+
+remediation_workflows:
+  - node-package-repair
+
+required_tests:
+  - TestChecksumValidationOnInstall
+
+required_permissions: []
+
+admission:
+  strict: false
+  allow_unknown_dependencies: true
+  allow_privileged_state_writes: false
