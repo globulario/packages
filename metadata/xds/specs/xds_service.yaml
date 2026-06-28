@@ -69,6 +69,7 @@ steps:
         group: root
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           # gRPC server address for xDS control plane
           grpc:
@@ -92,6 +93,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           {
             "etcd_endpoints": ["https://{{.NodeIP}}:2379"]
@@ -101,7 +103,7 @@ steps:
   - id: install-xds-binary
     type: install_package_payload
     install_bins: true
-    install_config: true
+    install_config: false
     install_spec: false
     install_systemd: false
 
