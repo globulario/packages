@@ -1,0 +1,22 @@
+{
+  "type": "command",
+  "name": "codex",
+  "version": "0.142.3",
+  "platform": "linux_amd64",
+  "publisher": "core@globular.io",
+  "entrypoint": "bin/noop",
+  "defaults": {
+    "configDir": "",
+    "spec": "specs/codex_cmd.yaml",
+    "scriptsDir": "scripts"
+  },
+  "description": "OpenAI Codex CLI — used by ai-executor to route prompts to Codex with ChatGPT-token or API-key auth. Wrapper package: the real Codex vendor tree is fetched and sha512-verified at install time into /usr/local/lib/codex and symlinked to /usr/local/bin/codex.",
+  "keywords": [
+    "codex",
+    "openai",
+    "ai",
+    "cli",
+    "llm"
+  ],
+  "license": "Apache-2.0"
+}
