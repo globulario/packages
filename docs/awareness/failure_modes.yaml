@@ -1,0 +1,52 @@
+failure_modes:
+  - id: packages.kind_drift_breaks_runtime_classification
+    title: Package kind drift breaks install and runtime classification
+    severity: critical
+    status: active
+    summary: |
+      If registry, specs, and package.json disagree on kind, controllers and
+      installers classify the same artifact differently. This can skip runtime
+      checks, install packages in the wrong order, or treat a command as a
+      service.
+    detected_by:
+      - scripts/validate-package-metadata.sh
+    related_invariants:
+      - packages.kind.identity_consistent
+
+  - id: packages.entrypoint_drift_starts_missing_binary
+    title: Entrypoint drift installs one binary and starts another
+    severity: critical
+    status: active
+    summary: |
+      A stale systemd ExecStart or spec executable can point at a binary name
+      that no longer matches package.json. The payload installs successfully but
+      systemd fails to start the package.
+    detected_by:
+      - scripts/validate-package-metadata.sh
+    related_invariants:
+      - packages.entrypoint.unit.spec_aligned
+
+  - id: packages.unguarded_hook_wipes_state
+    title: Unguarded package hook deletes runtime state
+    severity: high
+    status: active
+    summary: |
+      Package install scripts can run with elevated authority. An unguarded wipe
+      or migration can remove state on repeat install or upgrade.
+    detected_by:
+      - scripts/check-scylla-postinstall-safety.sh
+    related_invariants:
+      - packages.install_hooks_are_guarded_and_idempotent
+
+  - id: packages.partial_spec_sync_installs_stale_plan
+    title: Partial spec synchronization installs a stale plan
+    severity: high
+    status: active
+    summary: |
+      Updating only `specs/*.yaml` or only `metadata/<package>/specs/*.yaml`
+      leaves one consumer with stale install behavior.
+    detected_by:
+      - scripts/validate-package-metadata.sh
+    related_invariants:
+      - packages.metadata_and_root_specs_stay_mirrored
+

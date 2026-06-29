@@ -1,0 +1,10 @@
+files:
+  - registry.yaml
+  - metadata/*/package.json
+  - metadata/*/specs/*.yaml
+  - metadata/*/systemd/*.service
+  - metadata/*/scripts/*
+  - specs/*.yaml
+  - scripts/*.sh
+  - build.sh
+

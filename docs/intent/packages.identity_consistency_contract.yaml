@@ -1,0 +1,30 @@
+id: packages.identity_consistency_contract
+level: contract
+title: Package identity is consistent across registry, specs, and package metadata
+intent: |
+  Each Globular package has one identity: name, kind, platform, publisher,
+  version, binary, and runtime unit. Registry entries, package descriptors, and
+  install specs must agree before an artifact is published or installed.
+agent_guidance: |
+  When changing package identity, update every authoritative copy in the same
+  change and run the metadata validator. Do not fix a failing package by adding
+  a second classification list.
+bad_smells:
+  - package.json type differs from spec metadata.kind
+  - registry kind differs from package.json type
+  - package directory name and registry name diverge
+activation_triggers:
+  - package kind
+  - registry
+  - package.json
+expressed_by:
+  - registry.yaml
+  - metadata/*/package.json
+  - specs/*.yaml
+related_invariants:
+  - packages.kind.identity_consistent
+  - packages.registry_is_single_kind_source
+status: active
+required_tests:
+  - scripts/validate-package-metadata.sh
+

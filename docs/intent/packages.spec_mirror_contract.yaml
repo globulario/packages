@@ -1,0 +1,28 @@
+id: packages.spec_mirror_contract
+level: contract
+title: Root specs and package-local specs describe the same install plan
+intent: |
+  Root specs and metadata-local specs must not diverge. Both copies are used by
+  package tooling and installer flows, so changing install steps in one location
+  requires synchronizing the other.
+agent_guidance: |
+  When editing a spec, search for the corresponding root and metadata-local copy
+  before committing. Treat a one-sided spec change as stale metadata unless the
+  repository has intentionally removed that mirror.
+bad_smells:
+  - root spec updated but metadata-local spec unchanged
+  - metadata-local spec updated but root spec still has old step order
+  - validator output ignored because only one consumer currently passes
+activation_triggers:
+  - specs
+  - install steps
+  - metadata sync
+expressed_by:
+  - specs/*.yaml
+  - metadata/*/specs/*.yaml
+related_invariants:
+  - packages.metadata_and_root_specs_stay_mirrored
+status: active
+required_tests:
+  - scripts/validate-package-metadata.sh
+
