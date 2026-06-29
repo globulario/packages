@@ -36,6 +36,7 @@ import json
 import os
 import re
 import sys
+import filecmp
 
 import yaml
 
@@ -181,6 +182,20 @@ def main():
                 if want_kind and pj_type and pj_type != want_kind:
                     fail(errors, f"{name}: kind mismatch — package.json.type='{pj_type}' "
                                  f"vs registry.yaml kind='{want_kind}'.")
+                spec_rel = (pj.get("defaults") or {}).get("spec") or ""
+                if spec_rel:
+                    root_spec = os.path.join(repo_root, spec_rel)
+                    metadata_spec = os.path.join(meta_root, name, spec_rel)
+                    if not os.path.isfile(root_spec):
+                        fail(errors, f"{name}: package.json defaults.spec='{spec_rel}' but root spec is missing.\n"
+                                     f"      Root specs are build inputs; add {spec_rel} or fix package.json.")
+                    if not os.path.isfile(metadata_spec):
+                        fail(errors, f"{name}: package.json defaults.spec='{spec_rel}' but metadata-local spec is missing.\n"
+                                     f"      Expected {os.path.relpath(metadata_spec, repo_root)}.")
+                    if os.path.isfile(root_spec) and os.path.isfile(metadata_spec) and not filecmp.cmp(root_spec, metadata_spec, shallow=False):
+                        fail(errors, f"{name}: spec mirror drift — {spec_rel} differs from "
+                                     f"{os.path.relpath(metadata_spec, repo_root)}.\n"
+                                     f"      Root specs and metadata-local specs must be synchronized.")
             # awareness.yaml package_kind mirror (copy #3) — gated against registry.
             aw_path = os.path.join(meta_root, name, "awareness.yaml")
             if os.path.isfile(aw_path):

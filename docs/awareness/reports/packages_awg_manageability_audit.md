@@ -49,3 +49,19 @@ Repo-eval posture:
 - invariant/test alignment: 100/100 (0 of 6 critical/high invariants missing governing tests)
 - contract posture: 100/100 (4 found, 0 proposal-only, 0 unknown)
 - architecture drift: 100/100
+
+## Follow-up Audit Repair
+
+Re-audit after AWG master support found two concrete drift issues:
+- generated awareness output was stale after AWG began detecting
+  `scripts/validate-package-identity.py`
+- several root `specs/*.yaml` files differed from their
+  `metadata/<package>/specs/*.yaml` mirrors, and `codex` had a metadata-local
+  spec without the corresponding root spec
+
+Repairs:
+- refreshed AWG generated files
+- synced root specs from package-local specs
+- added `specs/codex_cmd.yaml`
+- hardened `scripts/validate-package-identity.py` so missing root specs and
+  root/metadata-local spec mirror drift now fail the package identity gate

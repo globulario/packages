@@ -54,6 +54,7 @@ steps:
         group: globular
         mode: 0644
         atomic: true
+        skip_if_exists: true
         content: |
           # Sidekick configuration for MinIO metrics proxy
           # This file is read by globular-sidekick.service via EnvironmentFile=

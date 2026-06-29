@@ -38,7 +38,7 @@ steps:
         owner: globular
         group: globular
         mode: 0750
-      - path: "{{.StateDir}}/cluster-doctor"
+      - path: "{{.StateDir}}/cluster_doctor"
         owner: globular
         group: globular
         mode: 0750
@@ -81,10 +81,10 @@ steps:
           [Service]
           User=globular
           Group=globular
-          WorkingDirectory=-{{.StateDir}}/cluster-doctor
+          WorkingDirectory=-{{.StateDir}}/cluster_doctor
           Environment=GLOBULAR_SERVICES_DIR={{.StateDir}}/services
 
-          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/cluster-doctor && chown globular:globular {{.StateDir}}/cluster-doctor'
+          ExecStartPre=+/bin/sh -c 'mkdir -p {{.StateDir}}/cluster_doctor && chown globular:globular {{.StateDir}}/cluster_doctor'
           ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -f /var/lib/globular/pki/issued/services/service.crt ] && exit 0; sleep 1; done; echo "TLS cert not ready after 60s"; ls -la /var/lib/globular/pki/issued/services/ 2>&1 || echo "cert dir missing"; exit 1'
           ExecStart={{.Prefix}}/bin/cluster_doctor_server
           Type=notify

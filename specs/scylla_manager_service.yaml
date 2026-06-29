@@ -56,28 +56,13 @@ steps:
         atomic: true
         content: |
           #!/bin/sh
-          # Generate or patch scylla-manager config with the correct CQL host and HTTPS.
+          # Generate scylla-manager config with the correct CQL host.
           # Reads ScyllaDB's listen address from its config; falls back
           # to detecting the address from the listening socket.
           CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"
-          CERT="{{.StateDir}}/pki/issued/services/service.crt"
-          KEY="{{.StateDir}}/pki/issued/services/service.key"
-
           if [ -f "$CFG" ]; then
-            # Config exists — patch in HTTPS block if missing
-            if ! grep -q "^https:" "$CFG"; then
-              HTTP_HOST=$(grep -E '^http:' "$CFG" | awk '{print $2}' | cut -d: -f1 | tr -d ' ')
-              if [ -n "$HTTP_HOST" ] && [ -f "$CERT" ] && [ -f "$KEY" ]; then
-                sed -i \
-                  -e "/^http:/a https: ${HTTP_HOST}:5443" \
-                  -e "/^https:/a tls_cert_file: $CERT" \
-                  -e "/^tls_cert_file:/a tls_key_file: $KEY" \
-                  "$CFG"
-              fi
-            fi
-            exit 0
+            exit 0   # skip if config already exists (user may have customised it)
           fi
-
           # 1) Try ScyllaDB's own config
           SCYLLA_CFG="/etc/scylla/scylla.yaml"
           CQL_HOST=""
@@ -94,18 +79,21 @@ steps:
             echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2
             exit 1
           fi
-          # Build TLS block only when certs exist
-          TLS_BLOCK=""
-          if [ -f "$CERT" ] && [ -f "$KEY" ]; then
-            TLS_BLOCK="https: ${CQL_HOST}:5443
-          tls_cert_file: $CERT
-          tls_key_file: $KEY
-          "
-          fi
+          # TLS material — point scylla-manager at the Globular service
+          # cert + key so the HTTPS endpoint (:5443) is signed by the
+          # Globular Root CA. Without these two keys, scylla-manager
+          # auto-generates an O=Scylla self-signed cert and the cluster-
+          # doctor scylla_manager.cluster_registered rule fails verify.
+          # Live regression observed 2026-06-03.
+          TLS_CERT="{{.StateDir}}/pki/issued/services/service.crt"
+          TLS_KEY="{{.StateDir}}/pki/issued/services/service.key"
           cat > "$CFG" <<EOCONF
           # Scylla Manager configuration (managed by Globular)
           http: ${CQL_HOST}:5080
-          ${TLS_BLOCK}
+          https: ${CQL_HOST}:5443
+          tls_cert_file: ${TLS_CERT}
+          tls_key_file: ${TLS_KEY}
+
           database:
             hosts:
               - ${CQL_HOST}
@@ -115,6 +103,154 @@ steps:
           sed -i 's/^          //' "$CFG"
           chown globular:globular "$CFG"
           chmod 0640 "$CFG"
+
+  # Project S: package-shipped cluster registration script. Idempotent:
+  # skips when a cluster is already registered; otherwise reads the agent
+  # token + Scylla host + agent HTTPS port from local config and calls
+  # `sctool cluster add`. Failure to register is logged but does NOT take
+  # down the unit (the script is invoked via ExecStartPost=- and the
+  # script exits 0 on registration error; cluster_doctor surfaces the
+  # unregistered state via the scylla_manager.cluster_registered rule).
+  - id: install-scylla-manager-register-cluster
+    type: install_files
+    files:
+      - path: "{{.Prefix}}/bin/scylla-manager-register-cluster"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          # Project S — idempotent scylla-manager cluster registration.
+          # Project U.2 — HTTPS-first read/probe with HTTP fallback.
+          #
+          # Runs as ExecStartPost after globular-scylla-manager.service has
+          # been told to start. Exits 0 on success or on any "soft" error
+          # so the unit stays up; cluster_doctor reports unregistered state
+          # as a backup-readiness finding.
+          #
+          # IMPORTANT: HTTPS probe failure modes are NOT all equivalent.
+          #   curl exit 7  → connection refused: HTTPS listener not enabled
+          #                  → SAFE fallback to HTTP.
+          #   curl exit 51/60/35 → TLS handshake or CA validation failure:
+          #                  → DO NOT fall back to HTTP. Exit non-zero so the
+          #                    unit / operator notice. Silent fallback would
+          #                    let a MitM hide the unregistered state.
+          set -u
+          CLUSTER_NAME="${SCYLLA_MANAGER_CLUSTER_NAME:-globular-internal}"
+          HOST="${SCYLLA_MANAGER_HOST:-$(hostname -I | awk '{print $1}')}"
+          HTTPS_BASE="${SCYLLA_MANAGER_HTTPS_BASE:-https://$HOST:5443/api/v1}"
+          HTTP_BASE="${SCYLLA_MANAGER_HTTP_BASE:-http://$HOST:5080/api/v1}"
+          AGENT_CFG="${SCYLLA_AGENT_CFG:-{{.StateDir}}/scylla-manager-agent/scylla-manager-agent.yaml}"
+          SCYLLA_CFG="${SCYLLA_CFG:-/etc/scylla/scylla.yaml}"
+          GLOBULAR_CA="${GLOBULAR_CA:-/var/lib/globular/pki/ca.crt}"
+          MAX_WAIT_SECONDS=60
+
+          log() { echo "scylla-manager-register-cluster: $*" >&2; }
+
+          # ── Phase 1: choose read-side endpoint (HTTPS preferred) ─────────
+          # Probe HTTPS with strict CA verification. Distinguish:
+          #   exit 0       → HTTPS reachable + valid cert → use HTTPS
+          #   exit 7       → HTTPS not enabled (conn refused) → HTTP fallback
+          #   exit 51/60/35 → TLS/cert failure → fail closed
+          # Note: --capath /dev/null is REQUIRED — curl on Ubuntu falls back
+          # to the system CA bundle when only --cacert is supplied, which
+          # would let a cert signed by a system-trusted CA pass verification
+          # even though we want STRICT verification against the Globular CA
+          # only. Setting --capath to a non-directory forces curl to honor
+          # --cacert as the sole trust anchor.
+          READ_BASE=""
+          READ_CURL_OPTS=""
+          curl -sf -m 2 --capath /dev/null --cacert "$GLOBULAR_CA" "$HTTPS_BASE/version" >/dev/null 2>&1
+          probe_rc=$?
+          case "$probe_rc" in
+            0)
+              READ_BASE="$HTTPS_BASE"
+              READ_CURL_OPTS="--capath /dev/null --cacert $GLOBULAR_CA"
+              log "HTTPS reachable with valid cert; using $HTTPS_BASE for read probes"
+              ;;
+            7)
+              READ_BASE="$HTTP_BASE"
+              READ_CURL_OPTS=""
+              log "HTTPS not enabled (curl exit 7); falling back to $HTTP_BASE for read probes"
+              ;;
+            *)
+              log "HTTPS reachable but cert validation failed (curl exit $probe_rc); refusing to fall back to HTTP — exiting non-zero so doctor surfaces this"
+              exit 2
+              ;;
+          esac
+
+          # ── Phase 2: wait for read API readiness ─────────────────────────
+          n=0
+          while [ "$n" -lt "$MAX_WAIT_SECONDS" ]; do
+            # shellcheck disable=SC2086
+            if curl -sf -m 2 $READ_CURL_OPTS "$READ_BASE/version" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+            n=$((n+1))
+          done
+          if [ "$n" -ge "$MAX_WAIT_SECONDS" ]; then
+            log "API at $READ_BASE did not become ready within ${MAX_WAIT_SECONDS}s — skipping registration; doctor will report unregistered state"
+            exit 0
+          fi
+
+          # ── Phase 3: idempotency ─────────────────────────────────────────
+          # shellcheck disable=SC2086
+          existing=$(curl -sf -m 3 $READ_CURL_OPTS "$READ_BASE/clusters" 2>/dev/null || echo '[]')
+          if echo "$existing" | grep -q "\"name\":\"$CLUSTER_NAME\""; then
+            log "cluster '$CLUSTER_NAME' already registered — no-op"
+            exit 0
+          fi
+          # Also check by host: a cluster registered under a different name
+          # for the same Scylla host should not be duplicated. Operator must
+          # rename or remove the existing one first; we do not silently
+          # replace because that would lose any operator-configured backup
+          # tasks attached to the prior registration.
+          host=$(grep -E '^rpc_address:'    "$SCYLLA_CFG" 2>/dev/null | awk '{print $2}' | tr -d "[:space:]'\"" || true)
+          [ -z "$host" ] && host=$(grep -E '^listen_address:' "$SCYLLA_CFG" 2>/dev/null | awk '{print $2}' | tr -d "[:space:]'\"" || true)
+          if [ -z "$host" ] || [ "$host" = "0.0.0.0" ]; then
+            host=$(ss -lnt | awk '/:9042 /{split($4,a,":"); print a[1]; exit}')
+          fi
+          if echo "$existing" | grep -q "\"host\":\"$host\""; then
+            log "a cluster is already registered under host $host (different name) — skipping; operator review required"
+            exit 0
+          fi
+
+          # ── Phase 4: read agent auth token + HTTPS port from agent config
+          token=$(grep -E '^auth_token:' "$AGENT_CFG" 2>/dev/null | awk '{print $2}')
+          if [ -z "$token" ]; then
+            log "agent auth_token not found in $AGENT_CFG — skipping registration"
+            exit 0
+          fi
+          # Agent HTTPS listen line e.g. "https: 10.0.0.63:5612"
+          agent_port=$(grep -E '^https:' "$AGENT_CFG" 2>/dev/null | awk '{print $2}' | awk -F: '{print $NF}')
+          [ -z "$agent_port" ] && agent_port="10001" # upstream default
+
+          if [ -z "$host" ] || [ "$host" = "127.0.0.1" ]; then
+            log "cannot determine ScyllaDB routable IP — skipping registration"
+            exit 0
+          fi
+
+          # ── Phase 5: register (write path stays on HTTP per Project U.2) ─
+          # sctool 3.10.1 does not expose --ca-file for the API URL, so the
+          # write path remains on the HTTP listener until upstream support
+          # lands or the script switches to a curl-based POST fallback. The
+          # READ path above is HTTPS-first; only the WRITE call uses HTTP.
+          # Output is captured in a variable and logged via journald — no
+          # /tmp file needed (avoids permission issues in systemd context).
+          log "registering cluster '$CLUSTER_NAME' via sctool over $HTTP_BASE (write path; HTTPS pending sctool --ca-file)"
+          sctool_out=$(sctool --api-url "$HTTP_BASE" cluster add \
+                --host "$host" \
+                --port "$agent_port" \
+                --name "$CLUSTER_NAME" \
+                --auth-token "$token" 2>&1)
+          if [ $? -eq 0 ]; then
+            log "cluster '$CLUSTER_NAME' registered"
+          else
+            log "registration command failed; doctor will surface unregistered state. sctool output: $sctool_out"
+          fi
+          exit 0
 
   - id: install-scylla-manager-service
     type: install_services
@@ -129,16 +265,23 @@ steps:
           Description=Globular Scylla Manager
           After=network-online.target scylla-server.service
           Wants=network-online.target scylla-server.service
+          StartLimitIntervalSec=600
+          StartLimitBurst=10
 
           [Service]
           Type=simple
           User=globular
           Group=globular
-          ExecStartPre=/bin/sh -c 'for i in $(seq 1 90); do ss -lnt | grep -q ":9042 " && exit 0; sleep 1; done; echo "scylla 9042 not ready"; exit 1'
-          ExecStartPre=/bin/sh -c 'if [ -x "{{.Prefix}}/bin/scylla-manager-configure" ]; then exec "{{.Prefix}}/bin/scylla-manager-configure"; fi; CFG="{{.StateDir}}/scylla-manager/scylla-manager.yaml"; CERT="{{.StateDir}}/pki/issued/services/service.crt"; KEY="{{.StateDir}}/pki/issued/services/service.key"; if [ -f "$CFG" ]; then grep -q "^https:" "$CFG" || { H=$(grep -E "^http:" "$CFG" | awk "{print \$2}" | cut -d: -f1 | tr -d " "); [ -n "$H" ] && [ -f "$CERT" ] && [ -f "$KEY" ] && sed -i -e "/^http:/a https: ${H}:5443" -e "/^https:/a tls_cert_file: $CERT" -e "/^tls_cert_file:/a tls_key_file: $KEY" "$CFG"; }; exit 0; fi; SCYLLA_CFG="/etc/scylla/scylla.yaml"; CQL_HOST=""; if [ -f "$SCYLLA_CFG" ]; then CQL_HOST=$(grep -E "^rpc_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); [ -z "$CQL_HOST" ] && CQL_HOST=$(grep -E "^listen_address:" "$SCYLLA_CFG" | awk "{print \$2}" | tr -d "[:space:]'\""); fi; if [ -z "$CQL_HOST" ] || [ "$CQL_HOST" = "0.0.0.0" ]; then CQL_HOST=$(ss -lnt | awk "/:9042 /{split(\$4,a,\":\"); print a[1]; exit}"); fi; [ -n "$CQL_HOST" ] && [ "$CQL_HOST" != "127.0.0.1" ] || { echo "scylla-manager-configure: cannot determine ScyllaDB routable IP — aborting" >&2; exit 1; }; TLS_BLOCK=""; [ -f "$CERT" ] && [ -f "$KEY" ] && TLS_BLOCK=$(printf "https: ${CQL_HOST}:5443\ntls_cert_file: $CERT\ntls_key_file: $KEY\n"); { printf "%s\n" "# Scylla Manager configuration (managed by Globular)" "http: ${CQL_HOST}:5080"; [ -n "$TLS_BLOCK" ] && printf "%s\n" "$TLS_BLOCK"; printf "%s\n" "" "database:" "  hosts:" "    - ${CQL_HOST}" "  port: 9042"; } > "$CFG"; chown globular:globular "$CFG"; chmod 0640 "$CFG"'
+          ExecStartPre={{.Prefix}}/bin/scylla-manager-configure
           ExecStart={{.Prefix}}/bin/scylla_manager --config-file {{.StateDir}}/scylla-manager/scylla-manager.yaml
+          # Project S: idempotent cluster registration. The "-" prefix makes
+          # failure non-fatal so registration issues don't take down the unit.
+          # cluster_doctor's scylla_manager.cluster_registered invariant
+          # surfaces the unregistered state when this script exits 0 without
+          # actually registering (e.g. agent token missing).
+          ExecStartPost=-+{{.Prefix}}/bin/scylla-manager-register-cluster
           Restart=on-failure
-          RestartSec=5
+          RestartSec=10
           LimitNOFILE=100000
 
           [Install]

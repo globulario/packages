@@ -38,7 +38,7 @@ steps:
         owner: globular
         group: globular
         mode: 0750
-      - path: "{{.StateDir}}/cluster-controller"
+      - path: "{{.StateDir}}/cluster_controller"
         owner: globular
         group: globular
         mode: 0750
