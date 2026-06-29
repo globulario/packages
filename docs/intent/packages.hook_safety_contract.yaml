@@ -1,0 +1,28 @@
+id: packages.hook_safety_contract
+level: contract
+title: Package install hooks are explicit, guarded, and repeatable
+intent: |
+  Package hooks may prepare runtime state, but they must be idempotent and must
+  not perform destructive cleanup without an explicit safety guard. Infrastructure
+  data paths require extra care because package install is not a rollback system.
+agent_guidance: |
+  Treat scripts as privileged mutation paths. Prefer scoped checks and explicit
+  guards. If a hook touches ScyllaDB data paths, run the Scylla safety guard and
+  keep the guard meaningful.
+bad_smells:
+  - rm -rf against a runtime data directory without a guard
+  - hook assumes first install only
+  - script hides failures that should block install
+activation_triggers:
+  - post-install
+  - install hook
+  - ScyllaDB data
+expressed_by:
+  - metadata/*/scripts/*
+  - scripts/*.sh
+related_invariants:
+  - packages.install_hooks_are_guarded_and_idempotent
+status: active
+required_tests:
+  - scripts/check-scylla-postinstall-safety.sh
+

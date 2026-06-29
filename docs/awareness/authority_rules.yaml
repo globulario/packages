@@ -1,0 +1,79 @@
+authorities:
+  - id: package.registry
+    owns:
+      - package names
+      - package kind classification
+      - package binary identity
+      - bootstrap tier and profile membership
+      - package dependency edges
+    source: registry.yaml
+    must_not_infer:
+      - package kind from directory name alone
+      - runtime dependency order from systemd After lines alone
+      - command package behavior from service package templates
+    consumers:
+      - build scripts
+      - installer spec sync
+      - controller/node-agent package classification
+
+  - id: package.metadata
+    owns:
+      - package.json descriptor fields
+      - package entrypoint path
+      - systemd unit name references
+      - health check unit references
+      - package-local awareness contracts
+    source: metadata/<package>/package.json and metadata/<package>/awareness.yaml
+    must_not_infer:
+      - entrypoint from stale systemd ExecStart
+      - package type from stale root specs
+      - checksum validity from filename or version string
+    consumers:
+      - repository ingestion
+      - installer package payload step
+      - package metadata validation
+
+  - id: package.install.spec
+    owns:
+      - install step order
+      - package payload placement
+      - generated config files
+      - service enable/start/health sequence
+    source: specs/*.yaml and metadata/<package>/specs/*.yaml
+    must_not_infer:
+      - install order from metadata directory ordering
+      - service config from binary defaults without the spec step
+      - systemd readiness from file existence
+    consumers:
+      - globular-installer
+      - package validation scripts
+
+  - id: package.runtime.unit
+    owns:
+      - systemd ExecStart command
+      - service user/group
+      - restart policy
+      - unit dependencies
+    source: metadata/<package>/systemd/*.service
+    must_not_infer:
+      - binary name from package name when package.json says otherwise
+      - runtime working directory from historical defaults
+      - health from enabled state
+    consumers:
+      - installer install_services step
+      - systemd runtime
+
+  - id: package.install.hook
+    owns:
+      - privileged post-install behavior
+      - package-specific setup scripts
+      - guarded data migration or initialization
+    source: metadata/<package>/scripts/* and scripts/*
+    must_not_infer:
+      - destructive cleanup is safe without an explicit guard
+      - service restart is safe without the package contract
+      - data directory ownership from package name alone
+    consumers:
+      - installer run_script step
+      - package-specific runtime bootstrap
+

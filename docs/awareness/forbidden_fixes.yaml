@@ -1,0 +1,33 @@
+forbidden_fixes:
+  - id: packages.no_duplicate_kind_registry
+    title: Do not introduce another package kind registry
+    summary: Package kind must flow from `registry.yaml` and validated metadata, not from a new hardcoded list.
+
+  - id: packages.no_kind_guessing
+    title: Do not guess package kind from name or directory
+    summary: Package kind is explicit metadata; name-derived guesses misclassify infrastructure and command packages.
+
+  - id: packages.no_stale_execstart_binary
+    title: Do not update package entrypoint without updating systemd/spec references
+    summary: Binary identity must remain aligned across package.json, install specs, and unit files.
+
+  - id: packages.no_unguarded_data_wipe
+    title: Do not add unguarded data wipes to install hooks
+    summary: Destructive package hooks require explicit guards and must pass the Scylla safety check where applicable.
+
+  - id: packages.no_unconditional_privileged_hook
+    title: Do not add unconditional privileged install hooks
+    summary: Package scripts must be repeatable and scoped to package-owned paths.
+
+  - id: packages.no_partial_spec_sync
+    title: Do not update only one copy of a mirrored spec
+    summary: Root specs and metadata-local specs must stay synchronized.
+
+  - id: packages.no_quorum_profile_downgrade
+    title: Do not weaken founding quorum package profiles casually
+    summary: Foundational package profile and bootstrap tier changes must preserve day-0/day-1 quorum contracts.
+
+  - id: packages.no_infra_kind_downgrade
+    title: Do not downgrade infrastructure package kind to service or command without a platform contract
+    summary: Infrastructure kind affects install ordering, runtime checks, and bootstrap assumptions.
+

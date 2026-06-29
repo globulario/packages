@@ -1,0 +1,29 @@
+id: packages.entrypoint_runtime_contract
+level: contract
+title: Installed package entrypoint matches spec and systemd runtime command
+intent: |
+  The binary installed from a package payload must be the binary referenced by
+  install specs and systemd units. A package change that renames an entrypoint
+  must update package.json, specs, and unit files together.
+agent_guidance: |
+  Check package.json `entrypoint`, spec executable fields, start-service binary
+  maps, and systemd ExecStart together. Do not leave compatibility symlinks or
+  stale unit names as the hidden source of truth.
+bad_smells:
+  - package entrypoint renamed but ExecStart still points at the old name
+  - start_services binaries map uses a different binary than package.json
+  - command package has a systemd unit
+activation_triggers:
+  - entrypoint
+  - ExecStart
+  - install_package_payload
+expressed_by:
+  - metadata/*/package.json
+  - metadata/*/specs/*.yaml
+  - metadata/*/systemd/*.service
+related_invariants:
+  - packages.entrypoint.unit.spec_aligned
+status: active
+required_tests:
+  - scripts/validate-package-metadata.sh
+
