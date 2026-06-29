@@ -27,10 +27,12 @@ steps:
         group: root
         mode: 0755
 
-  # Skip payload installation (keepalived is an OS package, not a bundled binary)
+  # Install the noop sentinel binary (shared stub for wrapper packages like keepalived/scylladb).
+  # install_bins: true extracts bin/noop from the tgz to /usr/lib/globular/bin/noop.
+  # The node-agent verifier requires this file to be present with the expected checksum.
   - id: install-payload
     type: install_package_payload
-    install_bins: false
+    install_bins: true
     install_config: false
     install_spec: false
     install_systemd: false

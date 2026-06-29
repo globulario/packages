@@ -2,11 +2,16 @@ version: 1
 
 metadata:
   name: mcp
-  version: "1.2.86"
+  # Placeholder only — the platform version is injected at build (version_source:
+  # platform in registry.yaml). Never hardcode a release version here.
+  version: "0.0.3"
   kind: service
   description: "MCP (Model Context Protocol) server exposing read-only Globular operator tools to AI assistants like Claude Code."
   keywords: [mcp, ai, claude, operator, diagnostics, tools]
   license: Apache-2.0
+  # Binary ships as mcp_server (the Go build for ./mcp collides with the package
+  # dir name). MUST match registry.yaml binary + package.json entrypoint —
+  # enforced by scripts/validate-package-identity.py.
   entrypoint: mcp_server
 
 steps:
@@ -133,6 +138,7 @@ steps:
           Type=simple
           User=globular
           Group=globular
+          ExecStartPre=+/bin/sh -c 'pkill -9 -x mcp_server || true'
           ExecStart={{.Prefix}}/bin/mcp_server
           Restart=always
           RestartSec=5
@@ -158,3 +164,8 @@ steps:
   - id: install-intent-nodes
     type: run_script
     script: post-install.sh
+
+    # required: load-bearing install step. A non-required run_script that is
+    # missing from the staged payload is SILENTLY SKIPPED and the package still
+    # reports SUCCESS (meta.half_done_must_not_look_done). Fail loud instead.
+    required: true

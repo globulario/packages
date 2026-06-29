@@ -30,10 +30,11 @@ steps:
         group: root
         mode: 0755
 
-  # Skip payload installation (ScyllaDB is an OS package, not a bundled binary)
+  # install_bins: true extracts bin/noop from the tgz to /usr/lib/globular/bin/noop.
+  # ScyllaDB itself is installed via .deb below; the noop stub is the only binary payload.
   - id: install-payload
     type: install_package_payload
-    install_bins: false
+    install_bins: true
     install_config: false
     install_spec: false
     install_systemd: false
