@@ -1,0 +1,150 @@
+version: 1
+
+metadata:
+  name: alertmanager
+  version: "0.28.1"
+  kind: infrastructure
+  description: "Prometheus Alertmanager for handling alerts sent by Prometheus and routing notifications."
+  keywords: [alertmanager, prometheus, alerting, notifications, monitoring]
+  license: Apache-2.0
+  entrypoint: alertmanager
+  extra_binaries: [amtool]
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+      - path: "{{.StateDir}}"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/alertmanager"
+        owner: globular
+        group: globular
+        mode: 0750
+      - path: "{{.StateDir}}/alertmanager/data"
+        owner: globular
+        group: globular
+        mode: 0750
+
+  - id: install-alertmanager-binaries
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  - id: install-alertmanager-config
+    type: install_files
+    files:
+      - path: "{{.StateDir}}/alertmanager/alertmanager.yml"
+        owner: globular
+        group: globular
+        mode: 0644
+        atomic: true
+        skip_if_exists: true
+        content: |
+          # Globular Alertmanager configuration — Day-0 default.
+          # Alerts are received, grouped, and visible via the Alertmanager UI
+          # (port 9093) and the monitoring gRPC service. No external
+          # notifications are sent until a real receiver is configured.
+
+          global:
+            resolve_timeout: 5m
+
+          route:
+            receiver: noop
+            group_by: ['alertname', 'severity']
+            group_wait: 30s
+            group_interval: 5m
+            repeat_interval: 4h
+
+            routes:
+              - match:
+                  severity: critical
+                group_wait: 10s
+                repeat_interval: 1h
+
+          receivers:
+            - name: noop
+
+          inhibit_rules:
+            - source_match:
+                severity: critical
+              target_match:
+                severity: warning
+              equal: ['alertname', 'instance']
+
+  - id: install-alertmanager-service
+    type: install_services
+    units:
+      - name: globular-alertmanager.service
+        owner: root
+        group: root
+        mode: 0644
+        atomic: true
+        content: |
+          [Unit]
+          Description=Globular Alertmanager
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=globular
+          Group=globular
+          ExecStartPre=+/usr/bin/mkdir -p {{.StateDir}}/alertmanager/data
+          ExecStartPre=+/usr/bin/chown globular:globular {{.StateDir}}/alertmanager/data
+          ExecStartPre=+/usr/bin/chmod 0750 {{.StateDir}}/alertmanager/data
+          ExecStart={{.Prefix}}/bin/alertmanager \
+            --config.file={{.StateDir}}/alertmanager/alertmanager.yml \
+            --storage.path={{.StateDir}}/alertmanager/data \
+            --web.listen-address=0.0.0.0:9093 \
+            --web.external-url=http://{{.NodeIP}}:9093
+          Restart=on-failure
+          RestartSec=2
+          LimitNOFILE=524288
+
+          [Install]
+          WantedBy=multi-user.target
+
+  - id: enable-alertmanager
+    type: enable_services
+    services:
+      - globular-alertmanager.service
+
+  - id: start-alertmanager
+    type: start_services
+    services:
+      - globular-alertmanager.service
+    restart_on_files:
+      globular-alertmanager.service:
+        - "{{.StateDir}}/alertmanager/alertmanager.yml"
+    binaries:
+      globular-alertmanager.service: alertmanager
+
+  - id: health-alertmanager
+    type: health_checks
+    services:
+      - globular-alertmanager.service
+
+  - id: run-post-install
+    type: run_script
+    script: post-install.sh

@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: yt_dlp
+  version: "2026.2.21"
+  kind: command
+  description: "Video and audio downloader supporting 1000+ sites — used by the media service for content ingestion."
+  keywords: [yt-dlp, video, audio, downloader, media, youtube]
+  license: Unlicense
+
+# yt-dlp CLI tool — video/audio downloader.
+entrypoint: bin/yt-dlp
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install yt-dlp binary from the packaged payload
+  - id: install-yt-dlp-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/yt-dlp
+  - id: install-yt-dlp-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/yt-dlp"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/yt-dlp" "$@"

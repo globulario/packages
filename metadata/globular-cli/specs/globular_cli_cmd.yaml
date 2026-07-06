@@ -1,0 +1,41 @@
+version: 1
+
+metadata:
+  name: globular-cli
+  version: "0.0.1"
+  kind: command
+  description: "Globular platform CLI — bootstraps clusters, manages packages, controls services, and handles DNS."
+  keywords: [globularcli, cli, cluster, package-management, bootstrap]
+  license: MIT
+
+# Binary is installed as "globular" so the identity registry verify step succeeds
+# and exec.LookPath("globular") works on all nodes.
+entrypoint: bin/globular
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  - id: install-globular-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false

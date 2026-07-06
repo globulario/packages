@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: sha256sum
+  version: "9.4.0"
+  kind: command
+  description: "SHA-256 checksum utility — used by backup-manager and node-agent for artifact integrity verification."
+  keywords: [sha256sum, checksum, integrity, verification, hash]
+  license: GPL-3.0
+
+# sha256sum CLI tool — used by backup-manager for checksum validation.
+entrypoint: bin/sha256sum
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install sha256sum binary from the packaged payload
+  - id: install-sha256sum-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/sha256sum
+  - id: install-sha256sum-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/sha256sum"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/sha256sum" "$@"

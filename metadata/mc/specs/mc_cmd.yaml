@@ -1,0 +1,60 @@
+version: 1
+
+metadata:
+  name: mc
+  version: "0.0.1"
+  kind: command
+  description: "MinIO Client (mc) — CLI for managing buckets, objects, and S3-compatible storage."
+  keywords: [mc, minio, cli, s3, object-storage, bucket]
+  license: AGPL-3.0
+
+# Explicit entrypoint: the binary is installed as "mc", not "mc_cmd"
+entrypoint: bin/mc
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Provide a stable command name on PATH: /usr/local/bin/mc
+  - id: install-mc-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/mc"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/mc" "$@"
+
+  # Install mc binary from the packaged payload
+  # The payload contains bin/mc (not bin/mc_cmd)
+  - id: install-mc-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false

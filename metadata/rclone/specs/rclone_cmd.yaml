@@ -1,0 +1,59 @@
+version: 1
+
+metadata:
+  name: rclone
+  version: "1.73.1"
+  kind: command
+  description: "Cloud storage sync tool — used by backup-manager for MinIO/S3 data transfer and replication."
+  keywords: [rclone, cloud-storage, s3, minio, sync, replication]
+  license: MIT
+
+# rclone CLI tool — used by backup-manager for MinIO/S3 operations.
+entrypoint: bin/rclone
+
+steps:
+  - id: ensure-user-group
+    type: ensure_user_group
+    user: globular
+    group: globular
+    home: "{{.StateDir}}"
+    shell: /usr/sbin/nologin
+    system: true
+
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "/usr/local/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # Install rclone binary from the packaged payload
+  - id: install-rclone-binary
+    type: install_package_payload
+    install_bins: true
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Provide a stable command name on PATH: /usr/local/bin/rclone
+  - id: install-rclone-wrapper
+    type: install_files
+    files:
+      - path: "/usr/local/bin/rclone"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          exec "{{.Prefix}}/bin/rclone" "$@"
