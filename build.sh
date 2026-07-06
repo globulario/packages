@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# build.sh — Build all infrastructure packages from specs/ + metadata/ + bin/.
+# build.sh — Build all infrastructure packages from metadata/<name>/ + bin/.
 #
 # Usage (from packages/ dir):
 #   bash build.sh --out <output-dir>
 #
-# For each spec in specs/, assembles a payload root:
+# SOURCE OF TRUTH: metadata/<name>/ is the single home for every package's spec,
+# scripts, and data. There is no top-level specs/ directory — it was removed in
+# the 2026-06 source-of-truth consolidation because duplicate copies drifted and
+# fixes silently landed in the copy the build did NOT read. Edit specs ONLY under
+# metadata/<name>/specs/.
+#
+# For each spec in metadata/*/specs/, assembles a payload root:
 #   <tmpdir>/bin/<binary>     — copied from bin/ (pre-built by build-all-packages.sh)
-#   <tmpdir>/specs/           — from specs/<name>_service.yaml
+#   <tmpdir>/specs/           — from metadata/<name>/specs/<file>
 #   <tmpdir>/data/            — from metadata/<name>/data/ (if present)
 #
 # Scripts are passed via --scripts-dir metadata/<name>/scripts/ (not bundled in root).
@@ -32,6 +38,13 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
+# Identity gate: every package's binary name + kind MUST agree across registry.yaml,
+# package.json, awareness.yaml, every spec (top-level specs/ AND metadata/*/specs/),
+# and the systemd unit before a single package is built. Guards against the recurring
+# mcp "mcp" vs "mcp_server" drift (fixed by hand 5+ times). Fail loud, never ship.
+echo "→ Validating package identity (registry.yaml is authority)..."
+python3 "${PKGS_ROOT}/scripts/validate-package-identity.py" --repo-root "${PKGS_ROOT}"
+
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
@@ -43,11 +56,11 @@ build_one() {
     local spec_file
     spec_file="$(basename "${spec}")"
 
-    # Derive metadata dir name: strip _service.yaml / _cmd.yaml, underscores→hyphens.
-    local name
-    name="$(echo "${spec_file}" | sed 's/_service\.yaml$//' | sed 's/_cmd\.yaml$//' | tr '_' '-')"
-
-    local meta="${PKGS_ROOT}/metadata/${name}"
+    # Spec path is metadata/<name>/specs/<file>; the package name is the metadata
+    # dir itself (already the canonical hyphenated name — no filename munging).
+    local meta name
+    meta="$(cd "$(dirname "${spec}")/.." && pwd)"
+    name="$(basename "${meta}")"
     if [[ ! -d "${meta}" ]]; then
         echo "  SKIP ${name}: no metadata dir"
         return 0
@@ -109,7 +122,7 @@ build_one() {
         --skip-missing-systemd=true 2>&1 | grep -v "^2026"
 }
 
-for spec in "${PKGS_ROOT}/specs/"*.yaml; do
+for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     if build_one "${spec}"; then
         PASS=$((PASS + 1))
     else

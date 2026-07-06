@@ -1,0 +1,115 @@
+invariants:
+  - id: packages.kind.identity_consistent
+    title: Package kind must agree across registry, package.json, and specs
+    severity: critical
+    status: active
+    summary: |
+      Package kind is runtime identity. The same package must not be service in
+      one file and infrastructure or command in another. Registry, root spec,
+      metadata spec, and package.json must agree before publication or install.
+    protects:
+      files:
+        - registry.yaml
+        - metadata/*/package.json
+        - metadata/*/specs/*.yaml
+        - specs/*.yaml
+    forbidden_fixes:
+      - packages.no_duplicate_kind_registry
+      - packages.no_kind_guessing
+    required_tests:
+      - scripts/validate-package-metadata.sh
+
+  - id: packages.entrypoint.unit.spec_aligned
+    title: Package entrypoint, install spec, and systemd ExecStart must name the same binary
+    severity: critical
+    status: active
+    summary: |
+      The package entrypoint is the artifact installed into the node. Specs and
+      systemd units must point at the same binary identity. Divergence installs
+      one binary and starts another, causing day-0/day-1 boot failures.
+    protects:
+      files:
+        - metadata/*/package.json
+        - metadata/*/specs/*.yaml
+        - metadata/*/systemd/*.service
+    forbidden_fixes:
+      - packages.no_stale_execstart_binary
+    required_tests:
+      - scripts/validate-package-metadata.sh
+
+  - id: packages.registry_is_single_kind_source
+    title: Application code must not duplicate package kind lists
+    severity: critical
+    status: active
+    summary: |
+      `registry.yaml` is the canonical package registry. Validators may cross
+      check it, but package kind lists must not drift into application logic or
+      installer-specific copies that become stale.
+    protects:
+      files:
+        - registry.yaml
+        - scripts/validate-package-metadata.sh
+    forbidden_fixes:
+      - packages.no_duplicate_kind_registry
+    required_tests:
+      - scripts/validate-package-metadata.sh
+
+  - id: packages.install_hooks_are_guarded_and_idempotent
+    title: Privileged install hooks must be guarded and idempotent
+    severity: high
+    status: active
+    summary: |
+      Package scripts run during install with elevated authority. They must be
+      repeatable and must guard destructive operations, especially data directory
+      changes for infrastructure packages.
+    protects:
+      files:
+        - metadata/*/scripts/*
+        - scripts/*.sh
+    forbidden_fixes:
+      - packages.no_unguarded_data_wipe
+      - packages.no_unconditional_privileged_hook
+    required_tests:
+      - scripts/check-scylla-postinstall-safety.sh
+
+  - id: packages.metadata_and_root_specs_stay_mirrored
+    title: Root specs and package-local specs must stay synchronized
+    severity: high
+    status: active
+    summary: |
+      The root `specs/*.yaml` files are the build-time source used by validation,
+      while `metadata/<package>/specs/*.yaml` travels with package metadata. A
+      package edit must not update one copy and leave the other stale.
+    protects:
+      files:
+        - specs/*.yaml
+        - metadata/*/specs/*.yaml
+    forbidden_fixes:
+      - packages.no_partial_spec_sync
+    required_tests:
+      - scripts/validate-package-metadata.sh
+
+  - id: packages.infrastructure_quorum_contracts_preserved
+    title: Foundational infrastructure packages must preserve quorum and bootstrap contracts
+    severity: high
+    status: active
+    summary: |
+      etcd, ScyllaDB, MinIO, gateway, xds, and supporting infrastructure packages
+      encode day-0/day-1 assumptions. Package metadata must not remove founding
+      quorum requirements, service units, or bootstrap tier/profile membership
+      without an explicit platform contract update.
+    protects:
+      files:
+        - registry.yaml
+        - metadata/etcd/**
+        - metadata/scylladb/**
+        - metadata/minio/**
+        - metadata/gateway/**
+        - metadata/xds/**
+    forbidden_fixes:
+      - packages.no_quorum_profile_downgrade
+      - packages.no_infra_kind_downgrade
+    required_tests:
+      - scripts/validate-package-metadata.sh
+      - scripts/check-scylla-postinstall-safety.sh
+

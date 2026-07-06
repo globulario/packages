@@ -1,0 +1,10 @@
+namespaces:
+  - id: globular.packages
+    label: Globular Packages
+    owns:
+      - registry.yaml
+      - metadata
+      - specs
+      - scripts
+    description: Package definition authority for Globular installable artifacts, package identity, install specs, runtime units, and privileged package hooks.
+
