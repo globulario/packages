@@ -32,11 +32,13 @@ BIN_DIR="${PKGS_ROOT}/bin"
 OUT_DIR="${PKGS_ROOT}/dist"
 DRY_RUN=0
 PLATFORM_VERSION=""   # applied to specs that declare metadata.platform_version: true
+DEBS_DIR=""           # dir of pre-downloaded .debs for bundle_debs (scylladb); skips apt-get
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --out) OUT_DIR="$2"; shift 2 ;;
         --platform-version) PLATFORM_VERSION="$2"; shift 2 ;;
+        --debs-dir) DEBS_DIR="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -224,17 +226,24 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     cp -a "${meta}/." "${root}/"
     rm -rf "${root}/bin"; ln -s "${BIN_DIR}" "${root}/bin"
     local_scripts=""; [[ -d "${meta}/scripts" ]] && local_scripts="--scripts-dir ${meta}/scripts"
+    debs_flag=""; [[ -n "${DEBS_DIR}" ]] && debs_flag="--debs-dir ${DEBS_DIR}"
 
     echo "  → pkg build ${name} ${version} (${kind})..."
+    blog="${WORK_DIR}/${name}.buildlog"
     # shellcheck disable=SC2086
     if "${GLOBULAR}" pkg build \
-            --spec "${spec}" --root "${root}" ${local_scripts} \
+            --spec "${spec}" --root "${root}" ${local_scripts} ${debs_flag} \
             --version "${version}" --publisher "core@globular.io" \
             --platform "linux_amd64" --out "${OUT_DIR}" \
-            --skip-missing-config=true --skip-missing-systemd=true 2>&1 | grep -v "^2026"; then
+            --skip-missing-config=true --skip-missing-systemd=true >"${blog}" 2>&1; then
+        grep -E "^\[OK\]|manifest:" "${blog}" | head -2
         PASS=$((PASS+1))
+    elif grep -qiE "apt-get download|bundle_debs|Can't find a source" "${blog}"; then
+        # bundle_debs needs the scylla apt repo or --debs-dir; a missing-asset
+        # skip, not a build error. Provide --debs-dir on the build host.
+        echo "  SKIP ${name} (${kind}): bundle_debs .debs unavailable (scylla apt repo or --debs-dir)"; SKIP=$((SKIP+1))
     else
-        echo "  ✗ FAIL ${name}"; FAIL=$((FAIL+1))
+        echo "  ✗ FAIL ${name}"; grep -v "^2026" "${blog}" | tail -6; FAIL=$((FAIL+1))
     fi
 done
 
