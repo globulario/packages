@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   name: scylla_manager
-  version: "3.8.1"
+  version: "3.11.1"
   kind: infrastructure
   description: "ScyllaDB Manager server for automated repair, backup, and cluster management."
   keywords: [scylla-manager, scylladb, repair, backup, cluster-management]
