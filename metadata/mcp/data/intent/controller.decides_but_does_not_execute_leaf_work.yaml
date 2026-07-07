@@ -1,0 +1,29 @@
+id: controller.decides_but_does_not_execute_leaf_work
+level: principle
+title: Controller decides, actors execute
+intent: The controller computes desired convergence and dispatches workflows, but leaf operations like package install, systemd manipulation, and node-local cleanup are executed by node agents/actors.
+agent_guidance: Do not move node-local side effects into controller code. Dispatch workflow/actor calls instead.
+bad_smells:
+- controller runs os/exec
+- controller writes installed state
+- controller restarts unit directly
+- controller performs node-local file edit
+activation_triggers:
+- controller
+- actor
+- leaf operation
+- systemctl
+- os/exec
+- dispatch
+expressed_by:
+- operators/architecture-overview.md
+- awareness/subsystem_boundaries.yaml
+related_invariants: []
+zooms_out_to:
+- subsystem.boundaries_define_authority
+zooms_in_to:
+- workflow.source_of_operational_truth
+- node_agent.is_executor_not_cluster_brain
+related_to:
+- remediation.must_go_through_workflow
+status: extracted_candidate

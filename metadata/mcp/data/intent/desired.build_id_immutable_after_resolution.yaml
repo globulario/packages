@@ -1,0 +1,29 @@
+id: desired.build_id_immutable_after_resolution
+level: mechanism
+title: Resolved desired build id is immutable convergence target
+intent: Once desired.version is resolved to a build_id and persisted, convergence compares against that persisted build_id rather than re-resolving latest repository state.
+agent_guidance: Do not re-resolve desired state during drift checks. If desired must change, create an explicit desired-state update.
+bad_smells:
+- latest repository version used as target
+- desired.version floating after resolution
+- drift checker queries repository latest
+- build_id overwritten silently
+activation_triggers:
+- desired build
+- build_id
+- latest repository
+- drift comparison
+- desired hash
+expressed_by:
+- awareness/authority_rules.yaml
+- developers/build-identity.md
+- awareness/decisions/desired-hash-is-convergence-identity.md
+related_invariants:
+- desired.build_id_immutable
+zooms_out_to:
+- package.identity_requires_build_id
+zooms_in_to:
+- desired_hash.is_convergence_identity
+related_to:
+- etcd.is_source_of_truth
+status: extracted_candidate

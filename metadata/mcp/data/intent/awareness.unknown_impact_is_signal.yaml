@@ -1,0 +1,28 @@
+id: awareness.unknown_impact_is_signal
+level: principle
+title: Unknown impact is a signal, not permission
+intent: When awareness has no match or low confidence, the correct response is caution, blind-spot reporting, or proposal creation, not free-form editing.
+agent_guidance: If context is missing, say so and narrow the change. Add proposal or intent seed after learning instead of pretending full coverage.
+bad_smells:
+- NO_MATCH treated as safe
+- low confidence ignored
+- blind spot not recorded
+- agent edits unknown boundary broadly
+activation_triggers:
+- NO_MATCH
+- UNKNOWN_IMPACT
+- blind spot
+- coverage
+- confidence
+expressed_by:
+- awareness/no_match_and_confidence.md
+- awareness/proposal_queue.md
+- awareness/graph_coverage.md
+related_invariants: []
+zooms_out_to:
+- awareness.preflight_before_edit
+zooms_in_to:
+- knowledge.promote_incidents_into_graph
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

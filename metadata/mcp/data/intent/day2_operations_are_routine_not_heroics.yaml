@@ -1,0 +1,32 @@
+id: day2_operations_are_routine_not_heroics
+level: vision
+title: Day-2 operations should be routine, not heroic
+intent: Daily health, failed workflows, doctor findings, backups, updates, and recovery should be regular checkable operations instead of emergency improvisation.
+agent_guidance: When adding operational features, make them scriptable, explainable, repeatable, and safe for routine use.
+bad_smells:
+- only manual SSH can diagnose
+- recovery docs lack status command
+- update path has no dry-run
+- backup not scheduled or visible
+activation_triggers:
+- Day-2
+- operations
+- routine
+- health check
+- update
+- recovery
+- backup
+expressed_by:
+- operators/day-0-1-2-operations.md
+- tasks/debug-failed-workflow.md
+- tasks/update-cluster.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- operator_action_requires_explain_plan_verify
+- backup.must_be_restorable_not_just_taken
+- doctor.findings_are_operator_language
+related_to:
+- globular.vision.explicit_convergence
+status: extracted_candidate

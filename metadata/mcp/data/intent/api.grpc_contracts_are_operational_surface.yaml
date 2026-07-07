@@ -1,0 +1,29 @@
+id: api.grpc_contracts_are_operational_surface
+level: principle
+title: gRPC/proto contracts are the operational surface
+intent: Services expose typed gRPC/protobuf contracts so clients, workflows, MCP tools, and AI agents operate through structured APIs rather than private implementation details.
+agent_guidance: Do not replace typed control paths with ad hoc shell/log parsing. Add or evolve proto contracts when operations need structure.
+bad_smells:
+- agent scrapes logs to decide action
+- CLI shells into service internals
+- operation has no typed RPC
+- contract change not reflected in workflow/MCP
+activation_triggers:
+- gRPC
+- proto
+- MCP tool
+- API
+- typed interface
+- reflection
+expressed_by:
+- operators/architecture-overview.md
+- developers/workflow-integration.md
+- awareness/mcp_tools.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- workflow.source_of_operational_truth
+related_to:
+- doctor.findings_are_operator_language
+status: extracted_candidate

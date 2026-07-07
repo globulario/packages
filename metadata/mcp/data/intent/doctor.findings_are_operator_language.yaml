@@ -1,0 +1,30 @@
+id: doctor.findings_are_operator_language
+level: principle
+title: Doctor findings are the operator-facing language of failure
+intent: The Cluster Doctor translates invariants, drift, and runtime evidence into findings that operators and agents can act on.
+agent_guidance: When adding detection, produce stable finding IDs, severity, evidence, freshness, and remediation hints. Avoid raw logs as the only explanation.
+bad_smells:
+- failure visible only in logs
+- finding has no stable ID
+- remediation without evidence
+- status lacks freshness
+activation_triggers:
+- doctor
+- finding
+- invariant
+- drift
+- operator report
+- explain
+expressed_by:
+- operators/cluster-doctor.md
+- awareness/mcp_tools.md
+- awareness/semantic_navigation.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- health.requires_fresh_evidence
+- remediation.must_go_through_workflow
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

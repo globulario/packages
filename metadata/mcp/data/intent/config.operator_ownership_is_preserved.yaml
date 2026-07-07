@@ -1,0 +1,26 @@
+id: config.operator_ownership_is_preserved
+level: principle
+title: Operator-owned config must not be clobbered by packages
+intent: Package upgrades must respect declared config ownership, merge strategy, sensitive flags, and conflict receipts rather than overwriting operator changes.
+agent_guidance: Before changing package install/config logic, preserve pre-install conflict gate and operator visibility of unresolved config conflicts.
+bad_smells:
+- upgrade overwrites config silently
+- sensitive config logged
+- conflict ignored
+- default config replaces operator edit
+activation_triggers:
+- config ownership
+- merge strategy
+- conflict receipt
+- pre-install gate
+- operator config
+expressed_by:
+- operators/package-lifecycle.md
+- developers/workflow-integration.md
+related_invariants: []
+zooms_out_to:
+- repository.metadata_is_authority
+zooms_in_to: []
+related_to:
+- audit.every_authority_change_is_explainable
+status: extracted_candidate

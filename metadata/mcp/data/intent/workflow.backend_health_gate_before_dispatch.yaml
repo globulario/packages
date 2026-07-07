@@ -1,0 +1,29 @@
+id: workflow.backend_health_gate_before_dispatch
+level: mechanism
+title: Workflow dispatch requires backend health gate
+intent: Workflow runs depend on durable backend state. Dispatching when the backend is unhealthy creates orphaned or unobservable operations.
+agent_guidance: Before dispatch, check workflow backend health and report blocked/degraded if unavailable. Do not clear actions without durable run result.
+bad_smells:
+- workflow dispatched when Scylla down
+- action cleared without run
+- backend error ignored
+- orphan scanner resumes terminal run
+activation_triggers:
+- workflow backend
+- Scylla
+- dispatch
+- orphan
+- blocked run
+expressed_by:
+- operators/workflows.md
+- awareness/convergence_rules.yaml
+- awareness/design_patterns.yaml
+related_invariants:
+- workflow.backend_health_gate
+zooms_out_to:
+- workflow.source_of_operational_truth
+zooms_in_to:
+- workflow.step_receipts_are_evidence
+related_to:
+- circuit_breakers_protect_convergence
+status: extracted_candidate

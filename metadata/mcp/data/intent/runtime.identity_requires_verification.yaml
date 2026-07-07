@@ -1,0 +1,28 @@
+id: runtime.identity_requires_verification
+level: principle
+title: Runtime identity must be proven, not assumed from liveness
+intent: A running process or reachable endpoint is not enough. Runtime identity must be tied to the expected package/build or signed proof before being treated as verified.
+agent_guidance: When fixing runtime verification, distinguish live, installed, verified, and corrupted. Do not collapse UNVERIFIED into healthy.
+bad_smells:
+- reachable service treated as correct build
+- checksum skipped because process running
+- unverified runtime hidden
+- wrapper package hashed as real binary
+activation_triggers:
+- runtime identity
+- verification
+- checksum
+- build proof
+- unverified
+- corrupted
+expressed_by:
+- operators/cluster-doctor.md
+- developers/build-identity.md
+related_invariants:
+- service.runtime_identity_unproven
+zooms_out_to:
+- runtime_health.requires_live_observation
+zooms_in_to: []
+related_to:
+- package.identity_requires_build_id
+status: extracted_candidate

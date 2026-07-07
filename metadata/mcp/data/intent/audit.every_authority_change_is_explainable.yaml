@@ -1,0 +1,30 @@
+id: audit.every_authority_change_is_explainable
+level: principle
+title: Authority changes must be explainable after the fact
+intent: Security, desired state, package lifecycle, workflow, and remediation changes must leave enough audit evidence to reconstruct who/what changed authority and why.
+agent_guidance: When adding authority-changing operations, include actor, subject, target, reason, timestamp, and outcome in durable/auditable form.
+bad_smells:
+- privilege change with no audit
+- desired state update lacks actor
+- package lifecycle transition unlogged
+- remediation lacks reason
+activation_triggers:
+- audit
+- authority change
+- RBAC
+- desired update
+- package lifecycle
+- remediation
+expressed_by:
+- operators/security.md
+- operators/workflows.md
+- operators/repository-overview.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.explicit_convergence
+zooms_in_to:
+- workflow.step_receipts_are_evidence
+- security.deny_overrides_allow
+related_to:
+- doctor.findings_are_operator_language
+status: extracted_candidate

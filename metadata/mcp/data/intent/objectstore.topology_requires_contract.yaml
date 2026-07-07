@@ -1,0 +1,32 @@
+id: objectstore.topology_requires_contract
+level: principle
+title: Object store topology is governed by explicit contract
+intent: MinIO membership, topology generation, endpoints, and destructive transitions are governed by etcd contract, not inferred from local disk or observed process state.
+agent_guidance: Do not infer objectstore membership from inventory alone. Respect /globular/objectstore/config, generations, approvals, and health gates.
+bad_smells:
+- node starts MinIO without contract
+- desired pool inferred locally
+- restart changes topology without approval
+- inventory absence used as membership truth
+activation_triggers:
+- MinIO
+- objectstore
+- topology
+- pool
+- generation
+- membership
+- contract
+expressed_by:
+- operators/minio-topology-validation.md
+- operators/minio-operational-runbook.md
+- awareness/subsystem_boundaries.yaml
+related_invariants:
+- objectstore.topology_contract
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- objectstore.destructive_changes_require_approval
+- inventory.missing_means_uncertain
+related_to:
+- repository.metadata_is_authority
+status: extracted_candidate

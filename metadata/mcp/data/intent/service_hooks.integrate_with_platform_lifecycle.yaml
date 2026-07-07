@@ -1,0 +1,27 @@
+id: service_hooks.integrate_with_platform_lifecycle
+level: pattern
+title: Services integrate through hooks, not private side channels
+intent: Services participate in health checks, backups, configuration, shutdown, and workflows through documented hooks and contracts.
+agent_guidance: When adding service-specific behavior, prefer platform hook interfaces over bespoke controller knowledge.
+bad_smells:
+- controller knows service internals
+- backup script reaches into service without hook
+- health custom logic unregistered
+- service config read from local private file
+activation_triggers:
+- service hook
+- BackupHookService
+- health check
+- configuration watch
+- graceful shutdown
+expressed_by:
+- developers/workflow-integration.md
+- operators/services-and-packages.md
+related_invariants: []
+zooms_out_to:
+- api.grpc_contracts_are_operational_surface
+zooms_in_to:
+- backup.provider_results_are_explicit
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

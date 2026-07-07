@@ -1,0 +1,28 @@
+id: health.requires_fresh_evidence
+level: principle
+title: Health claims require freshness
+intent: A health status is meaningful only if its evidence is fresh enough for the decision being made. Stale proofs should become unknown or degraded.
+agent_guidance: Attach timestamps/freshness to observations and do not let stale status masquerade as current truth.
+bad_smells:
+- cached health never expires
+- old proof shown as verified
+- freshness not checked before decision
+- status has no checked_at
+activation_triggers:
+- freshness
+- health
+- TTL
+- checked_at
+- cached status
+- stale proof
+expressed_by:
+- operators/cluster-doctor.md
+- awareness/live_overlay.md
+- awareness/graph_integrity.md
+related_invariants: []
+zooms_out_to:
+- degraded_is_explicit_not_hidden
+zooms_in_to: []
+related_to:
+- runtime_health.requires_live_observation
+status: extracted_candidate

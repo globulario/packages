@@ -1,0 +1,26 @@
+id: node_recovery.fence_before_destructive_reseed
+level: mechanism
+title: Fence before destructive reseed
+intent: Full node reseed crosses a destructive boundary. The node must be fenced and workflow state must explicitly wait for reprovision/ack before destructive steps continue.
+agent_guidance: Do not automate wipe/reseed without explicit phase, safety checks, fence state, and operator acknowledgment after reprovision.
+bad_smells:
+- wipe starts before AWAIT_REPROVISION
+- reseed proceeds without ack
+- failed workflow leaves node unfenced
+- reconciler fights recovery workflow
+activation_triggers:
+- full reseed
+- node recovery
+- fencing
+- wipe
+- ack reprovision
+- destructive boundary
+expressed_by:
+- operators/node-recovery.md
+related_invariants: []
+zooms_out_to:
+- quorum_safety_before_storage_mutation
+zooms_in_to: []
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

@@ -1,0 +1,49 @@
+id: workflow.source_of_operational_truth
+level: principle
+title: All cluster mutations flow through workflows
+
+intent: >
+  Every meaningful change to cluster state — service deployment, node join,
+  upgrade, remediation — goes through the Workflow Service. There are no
+  hidden imperative shortcuts. Workflows are idempotent, reach a terminal
+  state, and leave a complete audit trail. The controller decides, the
+  Workflow Service coordinates, Node Agents execute.
+
+agent_guidance: >
+  If you are tempted to make a cluster mutation directly (a direct etcd write,
+  a direct systemctl call from the controller, an inline state change), stop.
+  That action needs a workflow. If no workflow exists for it yet, the right
+  answer is to create one — not to bypass the model. AI remediation actions
+  must also go through workflows, not direct execution.
+
+bad_smells:
+  - cluster_controller calling os/exec or systemctl directly
+  - state change without a corresponding workflow run record
+  - remediation action taken outside the workflow engine
+  - workflow that never reaches SUCCEEDED or FAILED
+  - inline convergence logic that bypasses the semaphore and circuit breaker
+
+expressed_by:
+  - services/golang/workflow/
+  - services/golang/cluster_controller/
+
+related_invariants:
+  - repair.etcd.explicit.flag.only
+
+activation_triggers:
+  - direct state mutation
+  - controller calling systemctl
+  - remediation without audit trail
+  - inline fix bypassing workflow engine
+  - operation with no run record
+
+zooms_out_to:
+  - globular.vision.explicit_convergence
+
+related_to:
+  - etcd.is_source_of_truth
+
+zooms_in_to:
+  - state.repository_desired_installed_runtime
+
+status: seed

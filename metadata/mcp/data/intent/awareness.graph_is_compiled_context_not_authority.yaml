@@ -1,0 +1,28 @@
+id: awareness.graph_is_compiled_context_not_authority
+level: principle
+title: Awareness graph is compiled context, not runtime authority
+intent: Awareness helps agents navigate risk and context, but it is not live cluster truth or the authority for runtime decisions.
+agent_guidance: Use awareness to discover invariants, risks, and tests. Verify live state through runtime tools before making operational claims.
+bad_smells:
+- graph output treated as live cluster state
+- awareness suppresses runtime verification
+- static doc overrides etcd/runtime
+- agent acts on stale graph alone
+activation_triggers:
+- awareness
+- graph
+- preflight
+- static context
+- live overlay
+expressed_by:
+- awareness/decisions/awareness-graph-is-compiled-context-not-authority.md
+- awareness/live_overlay.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.ai_operable_cluster
+zooms_in_to:
+- awareness.preflight_before_edit
+- awareness.unknown_impact_is_signal
+related_to:
+- health.requires_fresh_evidence
+status: extracted_candidate

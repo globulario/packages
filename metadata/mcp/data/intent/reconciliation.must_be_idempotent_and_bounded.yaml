@@ -1,0 +1,33 @@
+id: reconciliation.must_be_idempotent_and_bounded
+level: pattern
+title: Reconciliation must be idempotent, bounded, and resumable
+intent: Controllers must converge repeatedly without causing duplicate side effects, unbounded hangs, or retry storms.
+agent_guidance: Use singleflight, backoff, bounded contexts, idempotency keys, and terminal workflow states. Retrying must not amplify failure.
+bad_smells:
+- context.Background in hot path
+- unbounded query in reconcile
+- parallel duplicate restart
+- retry loop with no backoff
+- action repeated without idempotency key
+activation_triggers:
+- reconcile
+- retry
+- backoff
+- singleflight
+- timeout
+- idempotent
+expressed_by:
+- operators/convergence-model.md
+- awareness/design_patterns.yaml
+- awareness/convergence_rules.yaml
+related_invariants:
+- convergence.no_infinite_retry
+- critical_queries.must_be_bounded
+zooms_out_to:
+- globular.vision.explicit_convergence
+zooms_in_to:
+- circuit_breakers_protect_convergence
+- workflow.backend_health_gate_before_dispatch
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

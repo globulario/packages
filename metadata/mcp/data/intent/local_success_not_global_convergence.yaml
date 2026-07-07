@@ -1,0 +1,28 @@
+id: local_success_not_global_convergence
+level: principle
+title: Local success is not global convergence
+intent: A local operation can succeed while the cluster is still inconsistent. Cluster convergence requires durable state publication and cross-layer reconciliation.
+agent_guidance: Do not report cluster success from a single local actor result. Commit evidence, let the controller reconcile, and expose pending convergence when needed.
+bad_smells:
+- install success returned before etcd write
+- node success marks release complete
+- one node healthy means cluster healthy
+- partial result treated as terminal
+activation_triggers:
+- local success
+- global convergence
+- install result
+- release status
+- partial commit
+expressed_by:
+- awareness/decisions/local-success-is-not-global-convergence.md
+- operators/convergence-model.md
+related_invariants:
+- install.result.atomic_commit
+zooms_out_to:
+- installed_state.owned_by_node_agent
+zooms_in_to:
+- install.result_requires_durable_commit
+related_to:
+- workflow.source_of_operational_truth
+status: extracted_candidate

@@ -1,0 +1,27 @@
+id: vip_management_requires_explicit_owner
+level: principle
+title: VIP management requires explicit owner and profile
+intent: Virtual IP behavior is not assumed cluster-wide. Keepalived/VIP ownership depends on explicit gateway profile, installed packages, systemd units, and config.
+agent_guidance: Before repairing VIP/ingress, verify keepalived installation, profile, unit, and config. Do not assume all nodes own VIP.
+bad_smells:
+- keepalived assumed installed everywhere
+- VIP repaired on non-gateway node
+- inventory absence used as VIP failure
+- VRRP state unverified
+activation_triggers:
+- VIP
+- keepalived
+- gateway
+- ingress
+- VRRP
+expressed_by:
+- operators/keepalived-and-ingress.md
+- awareness/forbidden_assumptions.yaml
+related_invariants:
+- layer0.vip_management_requires_explicit_owner
+zooms_out_to:
+- dns_pki.explicit_identity_over_convenient_routing
+zooms_in_to: []
+related_to:
+- inventory.missing_means_uncertain
+status: extracted_candidate

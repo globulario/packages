@@ -1,0 +1,28 @@
+id: inventory.missing_means_uncertain
+level: mechanism
+title: Missing inventory is uncertainty, not proof of failure
+intent: Inventory snapshots are point-in-time and may be partial. A missing node or service in inventory should be classified as uncertain unless direct health evidence proves failure.
+agent_guidance: Do not alert quorum loss or remove topology members solely from inventory absence. Cross-check desired membership and direct health endpoints.
+bad_smells:
+- inventory absence classified as down
+- collector timeout means node failed
+- partial inventory drives destructive fix
+- quorum lost alert from missing snapshot
+activation_triggers:
+- inventory
+- missing node
+- collector timeout
+- quorum
+- node down
+expressed_by:
+- awareness/forbidden_assumptions.yaml
+- awareness/authority_rules.yaml
+- operators/minio-topology-validation.md
+related_invariants:
+- objectstore.topology_contract
+zooms_out_to:
+- missing_state_is_not_delete_intent
+zooms_in_to: []
+related_to:
+- objectstore.topology_requires_contract
+status: extracted_candidate

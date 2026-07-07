@@ -1,0 +1,30 @@
+id: repository.lifecycle_state_machine
+level: mechanism
+title: Artifact lifecycle states gate what operations are legal
+intent: Artifacts move through explicit lifecycle states such as discovered, verified, published, quarantined, revoked, or broken. Each state constrains installation and repair.
+agent_guidance: When touching repository logic, preserve explicit state transitions. Do not make broken/quarantined/revoked artifacts installable through fallback paths.
+bad_smells:
+- state ignored during install
+- revoked artifact can be restored silently
+- quarantine bypass without explicit override
+- broken artifact treated as missing only
+activation_triggers:
+- artifact state
+- quarantine
+- revoke
+- publish
+- repair
+- verify
+expressed_by:
+- operators/package-lifecycle.md
+- operators/repository-overview.md
+related_invariants:
+- repository.metadata_first
+zooms_out_to:
+- repository.metadata_is_authority
+zooms_in_to:
+- repository.signature_policy_gates_trust
+- repository.repair_is_explicit
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate

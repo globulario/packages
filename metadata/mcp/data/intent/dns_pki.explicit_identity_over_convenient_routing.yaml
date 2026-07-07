@@ -1,0 +1,29 @@
+id: dns_pki.explicit_identity_over_convenient_routing
+level: principle
+title: DNS and PKI identities must be explicit
+intent: Routing convenience must not bypass certificate SANs, cluster identity, or service identity. DNS, VIPs, hostnames, and certificates must agree explicitly.
+agent_guidance: Do not solve routing by localhost/loopback hacks or wildcard assumptions that break TLS identity. Fix SANs, DNS records, or explicit routing config.
+bad_smells:
+- localhost bypasses cluster DNS
+- VIP missing from SAN
+- wildcard assumed to cover node host
+- TLS error hidden by insecure client
+activation_triggers:
+- DNS
+- PKI
+- SAN
+- VIP
+- localhost
+- certificate
+- routing
+expressed_by:
+- operators/dns-and-pki.md
+- operators/network-and-routing.md
+- operators/security.md
+related_invariants: []
+zooms_out_to:
+- globular.security.ceremony_over_configuration
+zooms_in_to: []
+related_to:
+- etcd.is_source_of_truth
+status: extracted_candidate

@@ -1,0 +1,27 @@
+id: channels_are_selection_policy_not_identity
+level: principle
+title: Repository channels are selection policy, not artifact identity
+intent: Channels help choose versions, but selected artifacts still require immutable build identity, lifecycle state, and verification.
+agent_guidance: Do not use channel name as drift identity. Resolve channel to artifact, then persist exact desired build.
+bad_smells:
+- installed channel compared to desired
+- channel latest used as runtime target
+- channel update bypasses desired transition
+- rollback target picked by channel only
+activation_triggers:
+- channel
+- latest
+- stable
+- release selection
+- desired resolution
+expressed_by:
+- operators/repository-overview.md
+- developers/versioning.md
+related_invariants: []
+zooms_out_to:
+- package.identity_requires_build_id
+zooms_in_to:
+- desired.build_id_immutable_after_resolution
+related_to:
+- repository.metadata_is_authority
+status: extracted_candidate

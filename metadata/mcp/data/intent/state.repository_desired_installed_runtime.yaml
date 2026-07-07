@@ -1,0 +1,50 @@
+id: state.repository_desired_installed_runtime
+level: principle
+title: Four independent truth layers — never collapse
+
+intent: >
+  Globular tracks every service across four independent layers, each with its
+  own owner and data source. Repository answers "does this version exist?"
+  Desired answers "what should be running?" Installed answers "what is actually
+  on this node?" Runtime answers "is it running and healthy?" Each layer can
+  fail independently. Never assume one implies another.
+
+agent_guidance: >
+  Before any fix involving service state, identify which layer the problem
+  lives in. A fix that collapses two layers (e.g. inferring runtime health from
+  desired state, or assuming installed means running) is architecturally wrong
+  even if it passes tests. Always walk the full chain:
+  Repository → Desired → Installed → Runtime.
+
+bad_smells:
+  - desired state treated as proof of installation
+  - installed state treated as proof of runtime health
+  - skipping layers when diagnosing convergence failures
+  - a single status field encoding multiple layer states
+  - assuming a missing layer means "not applicable" rather than "unknown"
+
+expressed_by:
+  - services/golang/cluster_controller/
+  - services/golang/node_agent/
+  - services/golang/repository/
+  - services/golang/cluster_doctor/
+
+related_invariants:
+  - cluster.layer3.not.layer4
+
+activation_triggers:
+  - service not starting after install
+  - desired state set but nothing happens
+  - service running but not in desired state
+  - drift not detected
+  - convergence stuck
+
+zooms_out_to:
+  - globular.vision.explicit_convergence
+
+zooms_in_to:
+  - desired_state.is_authority
+  - service.installation_is_not_runtime_truth
+  - runtime.identity.requires_proof
+
+status: seed

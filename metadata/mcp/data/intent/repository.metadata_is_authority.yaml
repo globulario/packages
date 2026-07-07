@@ -1,0 +1,33 @@
+id: repository.metadata_is_authority
+level: principle
+title: Repository metadata is authority, blobs are evidence
+intent: The repository’s manifest, ledger, lifecycle state, build identity, and signatures define artifact truth. Object presence alone is not authority.
+agent_guidance: Do not treat MinIO blob existence as publish truth. Resolve through repository metadata and lifecycle state, then verify blob/checksum/signature.
+bad_smells:
+- blob exists so package is published
+- latest file name used as identity
+- missing manifest ignored
+- quarantined artifact installable by accident
+activation_triggers:
+- repository
+- artifact
+- manifest
+- ledger
+- blob
+- MinIO
+- package
+expressed_by:
+- operators/repository-overview.md
+- operators/package-lifecycle.md
+- architecture/package-supply-chain.md
+related_invariants:
+- repository.metadata_first
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- repository.lifecycle_state_machine
+- repository.signature_policy_gates_trust
+- package.identity_requires_build_id
+related_to:
+- objectstore.topology_requires_contract
+status: extracted_candidate

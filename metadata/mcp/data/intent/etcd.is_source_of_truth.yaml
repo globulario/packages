@@ -1,0 +1,48 @@
+id: etcd.is_source_of_truth
+level: principle
+title: etcd is the sole source of truth — no silent forks
+
+intent: >
+  All cluster configuration, service endpoints, desired state, and node state
+  live in etcd. No environment variables, no hardcoded addresses, no local
+  config files that silently diverge. If etcd cannot provide a value, the
+  service must fail visibly — not fall back to a local default that creates
+  a shadow truth invisible to the rest of the cluster.
+
+agent_guidance: >
+  Never add a fallback that reads from a local file, env var, or hardcoded
+  default when etcd is unavailable for a runtime value. The correct response
+  to etcd unavailability is a visible error or degraded state — not silent
+  local operation. The only acceptable fallbacks are during Day-0 bootstrap
+  before etcd exists, using seed files explicitly designed for that purpose.
+
+bad_smells:
+  - os.Getenv() used for service configuration
+  - hardcoded addresses or ports in service code
+  - local config file silently overriding etcd value
+  - fallback to defaults when etcd key is missing
+  - service that continues operating with stale local state when etcd is down
+
+expressed_by:
+  - services/golang/config/
+  - services/golang/globular_service/
+
+related_invariants:
+  - gateway.no.etcd.writes
+  - pki.ca.canonical.path
+
+activation_triggers:
+  - hardcoded address or port
+  - env var used for config
+  - local fallback when etcd unavailable
+  - config file overriding etcd
+  - service running with stale local state
+
+zooms_out_to:
+  - state.repository_desired_installed_runtime
+
+zooms_in_to:
+  - desired_state.is_authority
+  - degraded_is_explicit_not_hidden
+
+status: seed

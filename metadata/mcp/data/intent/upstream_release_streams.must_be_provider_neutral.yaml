@@ -1,0 +1,28 @@
+id: upstream_release_streams.must_be_provider_neutral
+level: principle
+title: Upstream release streams are provider-neutral inputs
+intent: Repository upstreams can come from GitHub, HTTP, local directory, or git; the repository should normalize them into the same metadata/identity pipeline.
+agent_guidance: Do not hardwire release semantics to GitHub-only behavior when adding upstream support.
+bad_smells:
+- GitHub release assumed everywhere
+- HTTP provider bypasses manifest validation
+- local-dir import skips identity
+- upstream metadata treated as desired state
+activation_triggers:
+- upstream
+- GitHub
+- HTTP
+- local-dir
+- git provider
+- release stream
+expressed_by:
+- operators/repository-upstreams.md
+- operators/upstream-release-streams.md
+related_invariants: []
+zooms_out_to:
+- repository.metadata_is_authority
+zooms_in_to:
+- release.bom_is_precise_release_authority
+related_to:
+- package.identity_requires_build_id
+status: extracted_candidate

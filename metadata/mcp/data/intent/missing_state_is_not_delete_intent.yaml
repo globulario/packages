@@ -1,0 +1,31 @@
+id: missing_state_is_not_delete_intent
+level: principle
+title: Missing state is not destructive intent
+intent: Absent etcd keys or missing inventory entries can result from expiry, partial collection, partition, or startup race. Absence alone must not trigger destructive stop/delete behavior.
+agent_guidance: Distinguish explicit delete intent from missing evidence. Require intent markers, watch event classification, or last-known-state comparison before destructive action.
+bad_smells:
+- missing desired key stops service
+- absent key treated as delete
+- inventory absence means down
+- cleanup based on partial snapshot
+activation_triggers:
+- missing key
+- absent state
+- delete intent
+- lease expiry
+- inventory missing
+- destructive absence
+expressed_by:
+- awareness/decisions/missing-state-is-not-delete-intent.md
+- awareness/forbidden_assumptions.yaml
+- operational-knowledge/node-removal.md
+related_invariants:
+- critical_state.absence_is_not_destructive_intent
+zooms_out_to:
+- degraded_is_explicit_not_hidden
+zooms_in_to:
+- inventory.missing_means_uncertain
+- delete_requires_explicit_intent_marker
+related_to:
+- etcd.is_source_of_truth
+status: extracted_candidate

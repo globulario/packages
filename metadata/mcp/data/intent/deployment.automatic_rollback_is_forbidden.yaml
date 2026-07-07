@@ -1,0 +1,28 @@
+id: deployment.automatic_rollback_is_forbidden
+level: principle
+title: Automatic rollback is forbidden
+intent: Failed deployment does not imply safe rollback, especially with data/schema changes. The correct response is explicit diagnosis, guarded forward fix, or operator-chosen rollback.
+agent_guidance: Do not add automatic rollback on failure. Surface failure, keep evidence, and require explicit safe rollback choice if rollback is desired.
+bad_smells:
+- failure triggers automatic previous version
+- rollback assumes database reversible
+- upgrade failure clears desired state
+- operator choice bypassed
+activation_triggers:
+- rollback
+- deployment failure
+- downgrade
+- upgrade
+- migration
+expressed_by:
+- operators/deployment-philosophy.md
+- operators/package-lifecycle.md
+related_invariants: []
+zooms_out_to:
+- globular.vision.explicit_convergence
+zooms_in_to:
+- deployment.escalator_principle
+- rollback.must_be_operator_chosen
+related_to:
+- backup.must_be_restorable_not_just_taken
+status: extracted_candidate

@@ -1,0 +1,26 @@
+id: repository.signature_policy_gates_trust
+level: principle
+title: Publisher signatures gate artifact trust
+intent: Artifact trust is based on registered publisher keys, signatures, revocation state, and policy mode, not just repository possession.
+agent_guidance: When enforcing strict mode, require trusted key coverage and treat revoked keys as terminal denial.
+bad_smells:
+- unsigned artifact accepted in strict mode
+- revoked key signature accepted
+- publisher identity inferred from filename
+- private key handled by Globular
+activation_triggers:
+- signature
+- publisher key
+- strict mode
+- trusted publisher
+- revoked key
+expressed_by:
+- operators/package-lifecycle.md
+- operators/repository-overview.md
+related_invariants: []
+zooms_out_to:
+- repository.metadata_is_authority
+zooms_in_to: []
+related_to:
+- globular.security.ceremony_over_configuration
+status: extracted_candidate

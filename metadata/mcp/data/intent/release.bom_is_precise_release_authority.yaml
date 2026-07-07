@@ -1,0 +1,27 @@
+id: release.bom_is_precise_release_authority
+level: principle
+title: Release BOM is the precise authority for bootstrap artifacts
+intent: Bootstrap and install should resolve packages from an explicit release index/BOM, not filename guessing or floating latest behavior.
+agent_guidance: Do not infer release identity from filenames when BOM exists. Preserve exact version/build resolution and fallback warnings.
+bad_smells:
+- filename inference as primary path
+- latest release used during deterministic install
+- BOM copied but ignored
+- bootstrap artifact source ambiguous
+activation_triggers:
+- BOM
+- release-index
+- bootstrap artifact
+- version resolution
+- install-day0
+expressed_by:
+- design/version-control-phase1.md
+- design/version-control-redesign.md
+- developers/versioning.md
+related_invariants: []
+zooms_out_to:
+- package.identity_requires_build_id
+zooms_in_to: []
+related_to:
+- day0_day1_are_repeatable_ceremonies
+status: extracted_candidate

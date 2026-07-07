@@ -1,0 +1,25 @@
+id: backup.recovery_capsule_is_independent
+level: mechanism
+title: Recovery capsule must survive objectstore loss
+intent: Disaster recovery needs a recovery capsule and remote/restic path that can restore the cluster even when MinIO or the cluster itself is unavailable.
+agent_guidance: Do not make the only recovery path depend on the same objectstore or cluster service that may be lost.
+bad_smells:
+- recovery metadata stored only in MinIO
+- restore requires running cluster
+- capsule missing etcd seed or credentials
+- remote sync not tracked
+activation_triggers:
+- recovery capsule
+- disaster recovery
+- MinIO unavailable
+- restic repo
+- remote backup
+expressed_by:
+- operators/backup-and-restore.md
+related_invariants: []
+zooms_out_to:
+- backup.must_be_restorable_not_just_taken
+zooms_in_to: []
+related_to:
+- objectstore.topology_requires_contract
+status: extracted_candidate

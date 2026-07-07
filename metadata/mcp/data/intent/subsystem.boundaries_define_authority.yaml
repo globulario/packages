@@ -1,0 +1,31 @@
+id: subsystem.boundaries_define_authority
+level: principle
+title: Subsystem boundaries define ownership and authority
+intent: Each subsystem owns specific state and must not mutate or infer the state owned by another subsystem.
+agent_guidance: Before adding cross-subsystem behavior, identify who owns desired, installed, runtime, artifact, inventory, and remediation authority.
+bad_smells:
+- controller writes installed state
+- node-agent writes desired state
+- repository decides runtime health
+- objectstore infers inventory truth
+activation_triggers:
+- subsystem boundary
+- ownership
+- authority
+- controller
+- node-agent
+- repository
+- objectstore
+expressed_by:
+- awareness/subsystem_boundaries.yaml
+- operators/architecture-overview.md
+related_invariants: []
+zooms_out_to:
+- state.repository_desired_installed_runtime
+zooms_in_to:
+- installed_state.owned_by_node_agent
+- repository.metadata_is_authority
+- objectstore.topology_requires_contract
+related_to:
+- etcd.is_source_of_truth
+status: extracted_candidate

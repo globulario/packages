@@ -1,0 +1,29 @@
+id: backup.must_be_restorable_not_just_taken
+level: principle
+title: A backup is only real if it can be restored
+intent: Backups must include verification, quality state, restore testing, recovery capsule, and independent recovery path. A completed upload alone is not enough.
+agent_guidance: When changing backup logic, preserve restore validation, per-provider status, quality labels, and recovery capsule generation.
+bad_smells:
+- backup marked successful without verification
+- no restore test path
+- recovery depends on unavailable MinIO only
+- provider partial failure hidden
+activation_triggers:
+- backup
+- restore
+- recovery capsule
+- restic
+- snapshot
+- quality
+expressed_by:
+- operators/backup-and-restore.md
+- operational-knowledge/runbooks/restore-from-backup.yaml
+related_invariants: []
+zooms_out_to:
+- globular.vision.explicit_convergence
+zooms_in_to:
+- backup.recovery_capsule_is_independent
+- backup.provider_results_are_explicit
+related_to:
+- degraded_is_explicit_not_hidden
+status: extracted_candidate
