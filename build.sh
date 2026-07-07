@@ -171,6 +171,22 @@ for gob in xds gateway; do
     fi
 done
 
+# ── STEP 1b: strip release binaries (release invariant: no debug/symbol sections) ─
+# build-release.sh refuses to carry forward dist artifacts whose binaries still
+# carry .debug_/.zdebug_/.symtab sections. Strip them here so packages/dist is
+# release-clean. Go bins built with -s -w (xds/gateway) are already stripped.
+if [[ "${DRY_RUN}" -eq 0 ]]; then
+    echo "→ Stripping release binaries"
+    for b in "${BIN_DIR}"/*; do
+        [[ -f "$b" ]] || continue
+        file -b "$b" 2>/dev/null | grep -q '^ELF' || continue
+        if readelf -S "$b" 2>/dev/null | grep -Eq '\.(debug_|zdebug_|symtab)\b'; then
+            strip --strip-unneeded "$b" 2>/dev/null || strip -s "$b" 2>/dev/null || true
+            echo "    stripped $(basename "$b")"
+        fi
+    done
+fi
+
 # ── STEP 2: build every STATIC package (kind: infrastructure | command) ────────
 echo "→ Building static packages (kind: infrastructure | command) → ${OUT_DIR}"
 PASS=0; SKIP=0; FAIL=0
