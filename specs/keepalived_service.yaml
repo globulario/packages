@@ -7,7 +7,7 @@ metadata:
   description: "VRRP-based virtual IP failover daemon for high-availability cluster networking."
   keywords: [keepalived, vrrp, failover, high-availability, vip]
   license: GPL-2.0
-  entrypoint: noop
+  entrypoint: none
   install_bins: false
 
 steps:
@@ -27,12 +27,10 @@ steps:
         group: root
         mode: 0755
 
-  # Install the noop sentinel binary (shared stub for wrapper packages like keepalived/scylladb).
-  # install_bins: true extracts bin/noop from the tgz to /usr/lib/globular/bin/noop.
   # The node-agent verifier requires this file to be present with the expected checksum.
   - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false

@@ -4,7 +4,7 @@
   "version": "2.2.8",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/noop",
+  "entrypoint": "none",
   "defaults": {
     "configDir": "",
     "spec": "specs/keepalived_service.yaml"

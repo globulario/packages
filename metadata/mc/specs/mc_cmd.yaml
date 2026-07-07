@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   name: mc
-  version: "0.0.1"
+  version: "RELEASE.2025-08-13T08-35-41Z"
   kind: command
   description: "MinIO Client (mc) — CLI for managing buckets, objects, and S3-compatible storage."
   keywords: [mc, minio, cli, s3, object-storage, bucket]

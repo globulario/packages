@@ -58,7 +58,7 @@ packages:
 
   - name: scylladb
     kind: infrastructure
-    binary: noop
+    binary: none
     go_target: ""
     systemd_unit: scylla-server.service
     version_source: self
@@ -138,7 +138,7 @@ packages:
 
   - name: keepalived
     kind: infrastructure
-    binary: noop
+    binary: none
     go_target: ""
     systemd_unit: globular-keepalived.service
     version_source: self
@@ -326,7 +326,7 @@ packages:
 
   - name: claude
     kind: command
-    binary: noop
+    binary: none
     go_target: ""
     version_source: self
     publisher_id: core@globular.io
@@ -335,7 +335,7 @@ packages:
 
   - name: codex
     kind: command
-    binary: noop
+    binary: none
     go_target: ""
     version_source: self
     publisher_id: core@globular.io

@@ -4,7 +4,7 @@
   "version": "0.142.3",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/noop",
+  "entrypoint": "none",
   "defaults": {
     "configDir": "",
     "spec": "specs/codex_cmd.yaml",
