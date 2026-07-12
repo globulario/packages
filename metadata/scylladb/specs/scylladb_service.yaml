@@ -9,6 +9,13 @@ metadata:
   license: AGPL-3.0
   entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable).
+  # Installed from bundled .deb files whose binary bytes vary by build — the
+  # package VERSION is the identity, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/bin/scylla
+    version_probe: scylla --version
   provides_capabilities: [local-db]
   health_check:
     unit: scylla-server.service

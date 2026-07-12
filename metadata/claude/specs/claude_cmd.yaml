@@ -13,6 +13,16 @@ metadata:
   # binary-hash verifier skips it — see registry.yaml skip_runtime_check: true).
   entrypoint: none
   install_bins: false
+  # Declared, verifiable identity (identity.has_single_canonical_source_and_is_immutable).
+  # The fetched binary at installed_path MUST hash to this pinned sha256. pkg build
+  # carries it into the manifest verbatim (the build never sees the binary); the
+  # node-agent re-hashes /usr/local/bin/claude and compares — a declared canonical
+  # value, never one recomputed from disk. Keep this in lockstep with
+  # scripts/install-claude.sh CLAUDE_EXPECTED_SHA256 and package.json identity.
+  identity:
+    proof: binary_sha256
+    installed_path: /usr/local/bin/claude
+    checksum: "sha256:ff41753634b20c869ef6a32a20863521b33d4186ac0d6a49379ab48a48395ee7"
 
 steps:
   - id: ensure-user-group

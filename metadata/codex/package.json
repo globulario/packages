@@ -5,6 +5,11 @@
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "none",
+  "identity": {
+    "proof": "version",
+    "installed_path": "/usr/local/bin/codex",
+    "version_probe": "codex --version"
+  },
   "defaults": {
     "configDir": "",
     "spec": "specs/codex_cmd.yaml",

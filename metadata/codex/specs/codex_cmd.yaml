@@ -13,6 +13,13 @@ metadata:
   # /usr/local/bin/codex as a symlink entrypoint.
   entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable). The
+  # entrypoint is a symlink into a versioned vendor tree, so a single binary sha is
+  # not the identity — the package VERSION is, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/local/bin/codex
+    version_probe: codex --version
 
 steps:
   - id: ensure-user-group

@@ -9,6 +9,13 @@ metadata:
   license: GPL-2.0
   entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable).
+  # Installed from the host OS package repo — the binary bytes vary by distro, so
+  # the package VERSION is the identity, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/sbin/keepalived
+    version_probe: keepalived --version
 
 steps:
   # Note: keepalived runs as root (requires privileges for VRRP and VIP management)
