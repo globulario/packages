@@ -70,7 +70,7 @@ steps:
         atomic: true
         content: |
           #!/bin/sh
-          # Install-receipt marker for the libnss-resolve package — not meant
-          # to be invoked directly. The actual NSS plugin lives at
+          # Install-receipt marker for the libnss-resolve package — not meant to be
+          # invoked directly. The actual NSS plugin lives at
           # /lib/x86_64-linux-gnu/libnss_resolve.so.2 (installed via dpkg).
           echo "libnss-resolve: systemd-resolved NSS bridge (see /etc/nsswitch.conf)"
