@@ -7,7 +7,12 @@ metadata:
   description: "ScyllaDB Manager server for automated repair, backup, and cluster management."
   keywords: [scylla-manager, scylladb, repair, backup, cluster-management]
   license: Proprietary
-  entrypoint: scylla_manager
+  bundle_debs:
+    - scylla-manager-server
+  # Wrapper package: the real binary comes from the bundled .deb, but Globular
+  # owns a stable launcher under {{.Prefix}}/bin/scylla_manager.
+  entrypoint: bin/scylla_manager
+  install_bins: false
 
 steps:
   - id: ensure-user-group
@@ -39,12 +44,48 @@ steps:
         group: globular
         mode: 0750
 
-  - id: install-scylla-manager-binary
+  - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false
+
+  - id: prevent-scylla-manager-autostart
+    type: run_script
+    script: prevent-autostart.sh
+
+  - id: install-scylla-manager-debs
+    type: install_local_debs
+
+  - id: allow-scylla-manager-autostart
+    type: run_script
+    script: allow-autostart.sh
+
+  - id: install-scylla-manager-wrapper
+    type: install_files
+    files:
+      - path: "{{.Prefix}}/bin/scylla_manager"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          for candidate in \
+            /usr/bin/scylla-manager \
+            /opt/scylladb/scylla-manager/scylla-manager \
+            /opt/scylladb/scylla-manager/bin/scylla-manager \
+            /usr/lib/scylla-manager/scylla-manager \
+            /usr/libexec/scylla-manager/scylla-manager
+          do
+            if [ -x "$candidate" ]; then
+              exec "$candidate" "$@"
+            fi
+          done
+          echo "scylla_manager wrapper: real scylla-manager binary not found after installing scylla-manager-server" >&2
+          exit 127
 
   - id: install-scylla-manager-config-script
     type: install_files
