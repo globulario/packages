@@ -3,17 +3,18 @@
 #
 # STATIC vs DYNAMIC:
 #   - STATIC  (THIS script): every metadata/<name>/specs/*.yaml whose
-#       metadata.kind is 'infrastructure' or 'command' — includes xds and gateway.
-#       Binaries are third-party downloads, pre-staged Go bins (xds/gateway), or
-#       none (OS-daemon / .deb / fetch-at-install wrappers with entrypoint: none).
+#       metadata.kind is 'infrastructure' or 'command', EXCEPT release-generated
+#       packages that are rebuilt by services/scripts/build-release.sh.
+#       Binaries are third-party downloads or none (OS-daemon / .deb /
+#       fetch-at-install wrappers with entrypoint: none).
 #   - DYNAMIC (NOT this script): gRPC service packages (kind: service) are built
 #       by services/scripts/regenerate-release-inputs.sh into services/generated.
 #
 # BINARIES (staged into bin/):
-#   - vendored third-party  -> downloaded from upstream at the spec's version
-#   - xds, gateway          -> expected PRE-STAGED in bin/ (built from ../Globular);
-#                              skip+warn if missing (do NOT download)
-#   - entrypoint: none      -> no binary (keepalived, scylladb, claude, codex, ...)
+#   - vendored third-party     -> downloaded from upstream at the spec's version
+#   - entrypoint: none         -> no binary (keepalived, scylladb, claude, codex, ...)
+#   - install_bins: false      -> wrapper/fetch-at-install package; pkg build
+#                                 must NOT require a staged bin/<entrypoint>
 #
 # registry.yaml is NOT used (deprecated). A package's identity/kind/version comes
 # from its own metadata/<name>/specs/*.yaml (+ package.json).
@@ -22,17 +23,25 @@
 #   bash build.sh --out <dir>            # download binaries + build static packages
 #   bash build.sh --out <dir> --dry-run  # classify + report only (no downloads, no builds)
 #
-# GLOBULAR_BIN overrides the globular CLI path.
+# GLOBULAR_BIN overrides the globular CLI path. When unset, prefer the sibling
+# services repo and build a fresh CLI there so package builds do not silently
+# run against a stale globular binary.
 
 set -euo pipefail
 
 PKGS_ROOT="$(cd "$(dirname "$0")" && pwd)"
-GLOBULAR="${GLOBULAR_BIN:-globular}"
+SERVICES_ROOT_DEFAULT="${PKGS_ROOT}/../services"
+SERVICES_ROOT="${SERVICES_ROOT_OVERRIDE:-$SERVICES_ROOT_DEFAULT}"
+SERVICES_ROOT="$(cd "${SERVICES_ROOT}" 2>/dev/null && pwd)" || SERVICES_ROOT=""
+GLOBULAR="${GLOBULAR_BIN:-}"
+GLOBULAR_LOCAL_BIN="${SERVICES_ROOT}/golang/bin/globular"
+GLOBULAR_LOCAL_TARGET="./golang/globularcli"
 BIN_DIR="${PKGS_ROOT}/bin"
 OUT_DIR="${PKGS_ROOT}/dist"
 DRY_RUN=0
 PLATFORM_VERSION=""   # applied to specs that declare metadata.platform_version: true
-DEBS_DIR=""           # dir of pre-downloaded .debs for bundle_debs (scylladb); skips apt-get
+DEBS_DIR=""           # dir of pre-downloaded .debs for bundle_debs packages; skips apt-get
+RELEASE_GENERATED_NAMES="globular-cli gateway xds"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -43,6 +52,44 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
+
+resolve_globular_cli() {
+    if [[ -n "${GLOBULAR}" ]]; then
+        [[ -x "${GLOBULAR}" ]] || { echo "ERROR: GLOBULAR_BIN points to a non-executable path: ${GLOBULAR}" >&2; exit 1; }
+        return 0
+    fi
+
+    if [[ -n "${SERVICES_ROOT}" && -d "${SERVICES_ROOT}/golang/globularcli" ]]; then
+        GLOBULAR="${GLOBULAR_LOCAL_BIN}"
+        mkdir -p "$(dirname "${GLOBULAR}")"
+        if [[ "${DRY_RUN}" -eq 1 ]]; then
+            if [[ -x "${GLOBULAR}" ]]; then
+                echo "→ Using sibling services globular CLI at ${GLOBULAR} (dry-run)"
+            else
+                echo "→ WOULD build sibling services globular CLI at ${GLOBULAR} (dry-run)"
+            fi
+            return 0
+        fi
+        echo "→ Building current globular CLI from sibling services repo..."
+        (
+            cd "${SERVICES_ROOT}"
+            go build -o "${GLOBULAR}" "${GLOBULAR_LOCAL_TARGET}"
+        )
+        [[ -x "${GLOBULAR}" ]] || { echo "ERROR: failed to build globular CLI at ${GLOBULAR}" >&2; exit 1; }
+        return 0
+    fi
+
+    GLOBULAR="$(command -v globular || true)"
+    [[ -n "${GLOBULAR}" && -x "${GLOBULAR}" ]] || {
+        echo "ERROR: globular CLI not found. Set GLOBULAR_BIN or check out the sibling services repo." >&2
+        exit 1
+    }
+}
+
+resolve_globular_cli
+
+echo "→ Validating package metadata against registry authority"
+python3 "${PKGS_ROOT}/scripts/validate-package-identity.py" --repo-root "${PKGS_ROOT}"
 
 mkdir -p "${OUT_DIR}" "${BIN_DIR}"
 WORK_DIR="$(mktemp -d)"
@@ -62,8 +109,17 @@ spec_entrypoint() {  # <spec-file>
     [[ -z "$e" ]] && e="$(grep -m1 '^entrypoint:' "$1" 2>/dev/null | sed 's/^entrypoint:[[:space:]]*//' | sed "s/[\"']//g")"
     echo "$e"
 }
+spec_install_bins() {  # <spec-file>
+    local v; v="$(spec_field "$1" install_bins)"
+    [[ -z "$v" ]] && v="$(grep -m1 '^install_bins:' "$1" 2>/dev/null | sed 's/^install_bins:[[:space:]]*//' | sed "s/[\"']//g")"
+    echo "$v"
+}
 # Locate the spec file for a metadata package name.
 spec_path_for() { ls "${PKGS_ROOT}/metadata/$1/specs/"*.yaml 2>/dev/null | head -1; }
+is_release_generated_package() {  # <metadata-name>
+    local name="$1"
+    [[ " ${RELEASE_GENERATED_NAMES} " == *" ${name} "* ]]
+}
 
 # ── binary staging helpers ────────────────────────────────────────────────────
 # Download a binary into bin/ if it's missing or the wrong version. In --dry-run
@@ -98,6 +154,24 @@ stage_local_binary() {  # <src> <dst> <expected-version> <version-check-cmd> <la
     [[ "${DRY_RUN}" -eq 1 ]] && { echo "    ✓ ${label} ${expected} (would stage from ${src})"; return 0; }
     cp "${src}" "${dst}"; chmod +x "${dst}"
     echo "    ✓ ${label} ${expected} (staged from ${src})"
+}
+
+assert_package_version_matches_spec() {  # <metadata-dir>
+    local meta="$1"
+    local pkg_json="${meta}/package.json"
+    local spec
+    spec="$(ls "${meta}/specs/"*.yaml 2>/dev/null | head -1)"
+    [[ -f "${pkg_json}" && -n "${spec}" ]] || return 0
+
+    local pkg_version spec_version_value
+    pkg_version="$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "${pkg_json}" | head -1)"
+    spec_version_value="$(sed -n '/^metadata:/,/^[^ ]/ s/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' "${spec}" | head -1)"
+    [[ -n "${pkg_version}" && -n "${spec_version_value}" ]] || return 0
+
+    if [[ "${pkg_version}" != "${spec_version_value}" ]]; then
+        echo "FATAL: $(basename "${meta}") package.json version ${pkg_version} != spec version ${spec_version_value}" >&2
+        exit 1
+    fi
 }
 
 # ── STEP 1: download / stage third-party binaries (versions from specs) ────────
@@ -152,29 +226,14 @@ ensure_binary "${BIN_DIR}/sha256sum" "$(V sha256sum)" \
     "${BIN_DIR}/sha256sum --version 2>&1 | head -1 | awk '{print \$4}'" \
     "cp /usr/bin/sha256sum '${BIN_DIR}/sha256sum' && chmod +x '${BIN_DIR}/sha256sum'"
 
-# Local-only toolchain (version governed by the spec, binary staged from system).
+# Local binaries where appropriate.
 stage_local_binary "${MINIO_BIN:-/usr/bin/minio}" "${BIN_DIR}/minio" "$(V minio)" \
     "${MINIO_BIN:-/usr/bin/minio} --version 2>&1 | head -1 | grep -o 'RELEASE\\.[^ ]*'" "minio"
-stage_local_binary "${SCYLLA_MANAGER_BIN:-$(command -v scylla-manager 2>/dev/null || true)}" "${BIN_DIR}/scylla_manager" "$(V scylla-manager)" \
-    "${SCYLLA_MANAGER_BIN:-$(command -v scylla-manager 2>/dev/null || true)} --version 2>&1 | head -1" "scylla_manager"
-stage_local_binary "${SCYLLA_MANAGER_AGENT_BIN:-$(command -v scylla-manager-agent 2>/dev/null || true)}" "${BIN_DIR}/scylla_manager_agent" "$(V scylla-manager-agent)" \
-    "${SCYLLA_MANAGER_AGENT_BIN:-$(command -v scylla-manager-agent 2>/dev/null || true)} --version 2>&1 | head -1" "scylla_manager_agent"
-stage_local_binary "${SCTOOL_BIN:-$(command -v sctool 2>/dev/null || true)}" "${BIN_DIR}/sctool" "$(V sctool)" \
-    "${SCTOOL_BIN:-$(command -v sctool 2>/dev/null || true)} version 2>&1 | sed -n 's/^Client version: //p' | head -1" "sctool"
-
-# xds / gateway are Go binaries built from ../Globular — NOT downloaded.
-for gob in xds gateway; do
-    if [[ -x "${BIN_DIR}/${gob}" ]]; then
-        echo "    ✓ ${gob} pre-staged in bin/"
-    else
-        echo "    ⚠ ${gob}: not in bin/ — build it from ../Globular and stage bin/${gob} (package will be skipped)"
-    fi
-done
 
 # ── STEP 1b: strip release binaries (release invariant: no debug/symbol sections) ─
 # build-release.sh refuses to carry forward dist artifacts whose binaries still
 # carry .debug_/.zdebug_/.symtab sections. Strip them here so packages/dist is
-# release-clean. Go bins built with -s -w (xds/gateway) are already stripped.
+# release-clean.
 if [[ "${DRY_RUN}" -eq 0 ]]; then
     echo "→ Stripping release binaries"
     for b in "${BIN_DIR}"/*; do
@@ -192,6 +251,10 @@ echo "→ Building static packages (kind: infrastructure | command) → ${OUT_DI
 PASS=0; SKIP=0; FAIL=0
 for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     meta="$(cd "$(dirname "${spec}")/.." && pwd)"; name="$(basename "${meta}")"
+    assert_package_version_matches_spec "${meta}"
+    if is_release_generated_package "${name}"; then
+        continue
+    fi
     kind="$(spec_kind "${spec}")"
     # Only static packages here. Services (kind: service / unset) belong to
     # regenerate-release-inputs.sh -> services/generated.
@@ -200,23 +263,26 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
         *) continue ;;
     esac
 
-    # Version: platform-release version for opted-in packages (xds/gateway/
-    # globular-cli declare metadata.platform_version: true), else the spec's own.
+    # Version: platform-release version for opted-in packages, else the spec's own.
     if [[ "$(spec_field "${spec}" platform_version)" == "true" && -n "${PLATFORM_VERSION}" ]]; then
         version="${PLATFORM_VERSION}"
     else
         version="$(spec_version "${spec}")"
     fi
     entrypoint="$(spec_entrypoint "${spec}")"
+    install_bins="$(spec_install_bins "${spec}")"
 
     # Classify the binary requirement (pkg build does the real resolution from the
     # full bin/ symlink; we only need the expected NAME to pre-check presence):
     #   none/noop      -> binary-less package (no bin payload)
-    #   <empty>        -> auto-discovered Go binary (xds/gateway): expect bin/<name>
+    #   install_bins:false -> package installs its own wrapper/fetched binary
+    #   <empty>        -> auto-discovered Go binary: expect bin/<name>
     #   explicit path  -> expect bin/<basename(entrypoint)>
     binreq=""; binsrc=""
     if [[ "${entrypoint}" == "none" || "${entrypoint}" == "noop" ]]; then
         binsrc="entrypoint: none — no binary"
+    elif [[ "${install_bins}" == "false" ]]; then
+        binsrc="install_bins: false — wrapper/fetch-at-install package"
     elif [[ -z "${entrypoint}" ]]; then
         binreq="${name}"; binsrc="binary: bin/${name} (auto-discovered)"
     else
@@ -230,7 +296,6 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     fi
 
     # Real run: the binary must be present after STEP 1 (download / pre-stage).
-    # A genuinely-missing binary (e.g. xds/gateway not staged) is a clean skip.
     if [[ -n "${binreq}" && ! -f "${BIN_DIR}/${binreq}" ]]; then
         echo "  SKIP ${name} (${kind}): binary bin/${binreq} not available"; SKIP=$((SKIP+1)); continue
     fi
@@ -238,9 +303,22 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     # Assemble the package source: the whole metadata/<name>/ (specs, config,
     # systemd, scripts, data) + the FULL bin/ so pkg build resolves the
     # entrypoint (explicit or auto-discovered) and pulls the right binary.
+    # When metadata/<name>/bin exists, overlay it on top of the staged bin/
+    # view so wrapper packages can ship authored entrypoint scripts.
     root="${WORK_DIR}/${name}"; rm -rf "${root}"; mkdir -p "${root}"
     cp -a "${meta}/." "${root}/"
-    rm -rf "${root}/bin"; ln -s "${BIN_DIR}" "${root}/bin"
+    rm -rf "${root}/bin"
+    if [[ -d "${meta}/bin" ]]; then
+        mkdir -p "${root}/bin"
+        for staged in "${BIN_DIR}"/*; do
+            [[ -e "${staged}" ]] || continue
+            ln -s "${staged}" "${root}/bin/$(basename "${staged}")"
+        done
+        cp -a "${meta}/bin/." "${root}/bin/"
+        chmod +x "${root}/bin/"* 2>/dev/null || true
+    else
+        ln -s "${BIN_DIR}" "${root}/bin"
+    fi
     local_scripts=""; [[ -d "${meta}/scripts" ]] && local_scripts="--scripts-dir ${meta}/scripts"
     debs_flag=""; [[ -n "${DEBS_DIR}" ]] && debs_flag="--debs-dir ${DEBS_DIR}"
 

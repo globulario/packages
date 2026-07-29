@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# validate-package-identity_test.sh — regression test for the kind source-vs-mirror gate.
+# validate-package-identity_test.sh — regression test for package identity drift.
 #
-# Slice 2 (package-classification-single-source): registry.yaml.kind is the SOLE
-# author of package kind. This test proves the gate is source-vs-mirror, fail-closed:
+# This test proves the gate is source-vs-mirror, fail-closed:
 #   - an aligned fixture passes (exit 0);
 #   - a downstream kind mirror that DISAGREES with registry.yaml fails (exit 1),
 #     for each of the three mirrors: package.json `type`, awareness.yaml
-#     `package_kind`, and the spec's metadata.kind.
+#     `package_kind`, and the spec's metadata.kind;
+#   - a package.json/spec entrypoint drift fails, which is the `sctool` class.
 #
 # This is the regression for "the guardian must not hold a photocopy": the removed
 # CATALOG_KIND dict could co-drift; these cases lock the registry-as-source behaviour.
@@ -33,7 +33,7 @@ packages:
 YAML
 
 write_good() {
-  printf '{"entrypoint": "bin/foo", "type": "infrastructure"}\n' > "$PKG/package.json"
+  printf '{"entrypoint": "bin/foo", "type": "infrastructure", "defaults": {"spec": "specs/foo_service.yaml"}}\n' > "$PKG/package.json"
   printf 'package: foo\npackage_kind: infrastructure\n'          > "$PKG/awareness.yaml"
   printf 'metadata:\n  name: foo\n  kind: infrastructure\n  entrypoint: bin/foo\n' > "$PKG/specs/foo_service.yaml"
 }
@@ -71,5 +71,9 @@ assert_fail awareness.yaml "awareness.yaml package_kind='service'"
 write_good; printf 'metadata:\n  name: foo\n  kind: service\n  entrypoint: bin/foo\n' > "$PKG/specs/foo_service.yaml"
 assert_fail spec "metadata.kind='service'"
 
+# 4. package.json entrypoint disagrees with registry/spec.
+write_good; printf '{"entrypoint": "none", "type": "infrastructure", "defaults": {"spec": "specs/foo_service.yaml"}}\n' > "$PKG/package.json"
+assert_fail entrypoint "package.json.entrypoint"
+
 if [ "$fails" -ne 0 ]; then echo "=== $fails case(s) FAILED ==="; exit 1; fi
-echo "=== all kind source-vs-mirror cases passed ==="
+echo "=== all package identity source-vs-mirror cases passed ==="
