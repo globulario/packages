@@ -180,7 +180,7 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    provides: [prometheus]
+    provides: []
     requires: [prometheus]
     hard_deps: []
 
