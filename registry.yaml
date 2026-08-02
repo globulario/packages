@@ -10,7 +10,7 @@
 #   binary               — entrypoint binary name
 #   go_target            — Go build path relative to golang/ (empty = third-party)
 #   systemd_unit         — systemd unit name (default: globular-{name}.service)
-#   version_source       — platform (stamped from release tag) | self (binary reports own version)
+#   version_source       — code (committed source version) | self (binary reports own version)
 #   publisher_id         — artifact publisher (default: core@globular.io)
 #   control_plane_critical — true if required before workloads can start.
 #                          NON-AUTHORITATIVE OVERLAY: component_catalog (services repo) is
@@ -109,7 +109,7 @@ packages:
     binary: xds
     go_target: ""
     systemd_unit: globular-xds.service
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -125,7 +125,7 @@ packages:
     binary: gateway
     go_target: ""
     systemd_unit: globular-gateway.service
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -180,7 +180,7 @@ packages:
     day1_join_required: false
     skip_runtime_check: false
     bootstrap_tier: supporting
-    provides: []
+    provides: [prometheus]
     requires: [prometheus]
     hard_deps: []
 
@@ -348,7 +348,7 @@ packages:
     kind: command
     binary: globular
     go_target: globularcli
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: true
     bootstrap_tier: workload
@@ -361,7 +361,7 @@ packages:
     kind: service
     binary: node_agent_server
     go_target: node_agent/node_agent_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -376,7 +376,7 @@ packages:
     kind: service
     binary: cluster_controller_server
     go_target: cluster_controller/cluster_controller_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -391,7 +391,7 @@ packages:
     kind: service
     binary: cluster_doctor_server
     go_target: cluster_doctor/cluster_doctor_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: false
@@ -406,7 +406,7 @@ packages:
     kind: service
     binary: workflow_server
     go_target: workflow/workflow_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -421,7 +421,7 @@ packages:
     kind: service
     binary: repository_server
     go_target: repository/repository_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: true
     day0_required: true
@@ -436,7 +436,7 @@ packages:
     kind: service
     binary: authentication_server
     go_target: authentication/authentication_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: false
     day0_required: true
@@ -450,7 +450,7 @@ packages:
     kind: service
     binary: rbac_server
     go_target: rbac/rbac_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: false
     day0_required: true
@@ -464,7 +464,7 @@ packages:
     kind: service
     binary: resource_server
     go_target: resource/resource_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: false
     day0_required: false
@@ -478,7 +478,7 @@ packages:
     kind: service
     binary: dns_server
     go_target: dns/dns_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     control_plane_critical: false
     day0_required: true
@@ -496,7 +496,7 @@ packages:
     kind: service
     binary: event_server
     go_target: event/event_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
@@ -507,7 +507,7 @@ packages:
     kind: service
     binary: log_server
     go_target: log/log_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
@@ -518,7 +518,7 @@ packages:
     kind: service
     binary: monitoring_server
     go_target: monitoring/monitoring_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: supporting
@@ -529,7 +529,7 @@ packages:
     kind: service
     binary: backup_manager_server
     go_target: backup_manager/backup_manager_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -540,7 +540,7 @@ packages:
     kind: service
     binary: mcp_server
     go_target: mcp
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -555,7 +555,7 @@ packages:
     kind: service
     binary: ai_executor_server
     go_target: ai_executor/ai_executor_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -567,7 +567,7 @@ packages:
     kind: service
     binary: ai_memory_server
     go_target: ai_memory/ai_memory_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -578,7 +578,7 @@ packages:
     kind: service
     binary: ai_router_server
     go_target: ai_router/ai_router_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -589,7 +589,7 @@ packages:
     kind: service
     binary: ai_watcher_server
     go_target: ai_watcher/ai_watcher_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -604,7 +604,7 @@ packages:
     kind: service
     binary: file_server
     go_target: file/file_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -615,7 +615,7 @@ packages:
     kind: service
     binary: persistence_server
     go_target: persistence/persistence_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -626,7 +626,7 @@ packages:
     kind: service
     binary: search_server
     go_target: search/search_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -637,7 +637,7 @@ packages:
     kind: service
     binary: title_server
     go_target: title/title_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -648,7 +648,7 @@ packages:
     kind: service
     binary: media_server
     go_target: media/media_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -659,7 +659,7 @@ packages:
     kind: service
     binary: blog_server
     go_target: blog/blog_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -670,7 +670,7 @@ packages:
     kind: service
     binary: catalog_server
     go_target: catalog/catalog_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -681,7 +681,7 @@ packages:
     kind: service
     binary: conversation_server
     go_target: conversation/conversation_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -692,7 +692,7 @@ packages:
     kind: service
     binary: echo_server
     go_target: echo/echo_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -703,7 +703,7 @@ packages:
     kind: service
     binary: ldap_server
     go_target: ldap/ldap_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -714,7 +714,7 @@ packages:
     kind: service
     binary: mail_server
     go_target: mail/mail_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -725,7 +725,7 @@ packages:
     kind: service
     binary: sql_server
     go_target: sql/sql_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -736,7 +736,7 @@ packages:
     kind: service
     binary: storage_server
     go_target: storage/storage_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
@@ -747,7 +747,7 @@ packages:
     kind: service
     binary: torrent_server
     go_target: torrent/torrent_server
-    version_source: platform
+    version_source: code
     publisher_id: core@globular.io
     skip_runtime_check: false
     bootstrap_tier: workload
