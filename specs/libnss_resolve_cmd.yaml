@@ -1,0 +1,67 @@
+version: 1
+
+metadata:
+  name: libnss-resolve
+  version: "255.4"
+  kind: command
+  description: "systemd-resolved NSS bridge for reliable *.globular.internal hostname resolution."
+  keywords: [dns, nss, systemd-resolved, resolver]
+  license: LGPL-2.1
+  # Bundle the OS libnss-resolve .deb at build time so install stays
+  # offline/deterministic under node-agent and globular-installer — no live
+  # apt-get at join time.
+  bundle_debs:
+    - libnss-resolve
+  # No executable of its own: libnss-resolve is a passive NSS plugin library
+  # loaded by glibc, never invoked. `none` is a semantic sentinel, not a
+  # filename — the package ships no entrypoint and therefore carries no
+  # entrypoint checksum. Installation evidence comes from the payload
+  # verification step below, which is NOT executable identity proof.
+  entrypoint: none
+  install_bins: false
+
+install_bins: false
+
+steps:
+  - id: ensure-dirs
+    type: ensure_dirs
+    dirs:
+      - path: "{{.Prefix}}"
+        owner: root
+        group: root
+        mode: 0755
+      - path: "{{.Prefix}}/bin"
+        owner: root
+        group: root
+        mode: 0755
+
+  # This package carries a bundled .deb file, not a bin/libnss-resolve payload.
+  - id: install-payload
+    type: install_package_payload
+    install_bins: false
+    install_config: false
+    install_spec: false
+    install_systemd: false
+
+  # Install libnss-resolve and its bundled dependencies offline.
+  - id: install-libnss-resolve-debs
+    type: install_local_debs
+
+  # Wire the "resolve" NSS method into nsswitch.conf so glibc- and
+  # cgo-resolver-based hostname lookups (including Go binaries) route
+  # through systemd-resolved, which is what actually knows how to answer
+  # *.globular.internal after the join script's DNS resolver configuration.
+  # Only touches the mdns4_minimal-style default some base images ship;
+  # leaves an already-configured hosts: line alone.
+  - id: configure-nsswitch
+    type: run_script
+    script: configure-nsswitch.sh
+
+  # Prove the real payload actually landed. This is INSTALLATION EVIDENCE:
+  # dpkg record + the owned libnss_resolve.so.2 on disk + nsswitch wiring.
+  # It deliberately does not produce or stand in for an entrypoint checksum —
+  # a passing verification says "the library is installed and wired", never
+  # "this executable is the one the manifest declared".
+  - id: verify-libnss-resolve-payload
+    type: run_script
+    script: verify-libnss-resolve.sh
