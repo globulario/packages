@@ -12,16 +12,14 @@ metadata:
   # apt-get at join time.
   bundle_debs:
     - libnss-resolve
-  entrypoint: bin/libnss-resolve
+  # No executable of its own: libnss-resolve is a passive NSS plugin library
+  # loaded by glibc, never invoked. `none` is a semantic sentinel, not a
+  # filename — the package ships no entrypoint and therefore carries no
+  # entrypoint checksum. Installation evidence comes from the payload
+  # verification step below, which is NOT executable identity proof.
+  entrypoint: none
   install_bins: false
 
-# Wrapper/marker package: libnss-resolve has no executable of its own — it is
-# a passive NSS plugin library (/lib/.../libnss_resolve.so.2), never invoked
-# directly. The {{.Prefix}}/bin/libnss-resolve file installed below exists
-# solely as a stable, checksummed install-receipt anchor so node-agent's
-# convergence checks (entrypoint checksum proof) have something to verify,
-# mirroring how the sctool package wraps scylla-manager-client.
-entrypoint: bin/libnss-resolve
 install_bins: false
 
 steps:
@@ -59,18 +57,11 @@ steps:
     type: run_script
     script: configure-nsswitch.sh
 
-  # Install-receipt/verifier anchor — not meant to be invoked.
-  - id: install-libnss-resolve-marker
-    type: install_files
-    files:
-      - path: "{{.Prefix}}/bin/libnss-resolve"
-        owner: root
-        group: root
-        mode: 0755
-        atomic: true
-        content: |
-          #!/bin/sh
-          # Install-receipt marker for the libnss-resolve package — not meant to be
-          # invoked directly. The actual NSS plugin lives at
-          # /lib/x86_64-linux-gnu/libnss_resolve.so.2 (installed via dpkg).
-          echo "libnss-resolve: systemd-resolved NSS bridge (see /etc/nsswitch.conf)"
+  # Prove the real payload actually landed. This is INSTALLATION EVIDENCE:
+  # dpkg record + the owned libnss_resolve.so.2 on disk + nsswitch wiring.
+  # It deliberately does not produce or stand in for an entrypoint checksum —
+  # a passing verification says "the library is installed and wired", never
+  # "this executable is the one the manifest declared".
+  - id: verify-libnss-resolve-payload
+    type: run_script
+    script: verify-libnss-resolve.sh

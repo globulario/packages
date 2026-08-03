@@ -75,12 +75,27 @@ build_one() {
         return 0
     fi
 
-    local bin_name
-    bin_name="$(basename "${entrypoint}")"
-    local bin_src="${PKGS_ROOT}/bin/${bin_name}"
-    if [[ ! -f "${bin_src}" ]]; then
-        echo "  SKIP ${name}: binary not found at bin/${bin_name}"
-        return 0
+    # `none` is a semantic sentinel, not a filename: the package ships no
+    # executable of its own (e.g. libnss-resolve, a passive NSS plugin library).
+    # Such a package must still BUILD — it carries a real payload, just not a
+    # binary one. Treating `none` as a bin/ path made basename() look for
+    # bin/none, miss it, and skip the package entirely.
+    #
+    # Deliberately NOT applied to `noop`: migrating those entries is separate
+    # work and is out of scope here.
+    local no_entrypoint=false
+    if [[ "${entrypoint}" == "none" ]]; then
+        no_entrypoint=true
+    fi
+
+    local bin_name="" bin_src=""
+    if [[ "${no_entrypoint}" == "false" ]]; then
+        bin_name="$(basename "${entrypoint}")"
+        bin_src="${PKGS_ROOT}/bin/${bin_name}"
+        if [[ ! -f "${bin_src}" ]]; then
+            echo "  SKIP ${name}: binary not found at bin/${bin_name}"
+            return 0
+        fi
     fi
 
     # Read version from spec metadata.version.
@@ -92,9 +107,12 @@ build_one() {
     # Assemble payload root in a per-package temp dir.
     local root="${WORK_DIR}/${name}"
     rm -rf "${root}"
-    mkdir -p "${root}/bin" "${root}/specs"
+    mkdir -p "${root}/specs"
 
-    cp -L "${bin_src}" "${root}/bin/${bin_name}"
+    if [[ "${no_entrypoint}" == "false" ]]; then
+        mkdir -p "${root}/bin"
+        cp -L "${bin_src}" "${root}/bin/${bin_name}"
+    fi
     cp "${spec}" "${root}/specs/${spec_file}"
 
     # Copy data/ from metadata dir (e.g. intent YAML nodes).
@@ -108,12 +126,33 @@ build_one() {
         scripts_flag="--scripts-dir ${meta}/scripts"
     fi
 
+    # Pass a checked-in debs/ directory straight through so the canonical build
+    # bundles the exact .deb committed to this repository. Without it the
+    # builder falls back to `apt-get download`, which needs a live network and
+    # can resolve a different upstream revision than the one under review.
+    local debs_flag=""
+    if [[ -d "${meta}/debs" ]]; then
+        debs_flag="--debs-dir ${meta}/debs"
+    elif grep -q '^[[:space:]]*bundle_debs:' "${spec}"; then
+        # The spec asks to bundle OS packages but this repository ships none.
+        # Proceeding would let the builder fall back to `apt-get download`,
+        # which needs a live network and resolves whatever upstream currently
+        # publishes — for libnss-resolve that is 45 debs / 7.6 MB of transitive
+        # closure instead of the single 86 KB .deb under review. A canonical
+        # build must produce the payload that was actually reviewed, so this is
+        # an error rather than a silent substitution.
+        echo "  FAIL ${name}: spec declares bundle_debs but ${meta}/debs is missing;" >&2
+        echo "       refusing to fall back to apt-get download for a canonical build" >&2
+        return 1
+    fi
+
     echo "  → pkg build ${name} (${version})..."
     # shellcheck disable=SC2086
     "${GLOBULAR}" pkg build \
         --spec "${root}/specs/${spec_file}" \
         --root "${root}" \
         ${scripts_flag} \
+        ${debs_flag} \
         --version "${version}" \
         --publisher "core@globular.io" \
         --platform "linux_amd64" \

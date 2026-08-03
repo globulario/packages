@@ -4,7 +4,7 @@
   "version": "255.4",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/libnss-resolve",
+  "entrypoint": "none",
   "defaults": {
     "configDir": "",
     "spec": "specs/libnss_resolve_cmd.yaml"

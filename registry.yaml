@@ -308,7 +308,7 @@ packages:
 
   - name: libnss-resolve
     kind: command
-    binary: libnss-resolve
+    binary: none
     go_target: ""
     version_source: self
     publisher_id: core@globular.io
