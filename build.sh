@@ -330,7 +330,10 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     local_scripts=""; [[ -d "${meta}/scripts" ]] && local_scripts="--scripts-dir ${meta}/scripts"
     debs_flag=""; [[ -n "${DEBS_DIR}" ]] && debs_flag="--debs-dir ${DEBS_DIR}"
     authority_flags=""
-    [[ -f "${PACKAGE_SOURCES}" ]] && authority_flags="--package-sources ${PACKAGE_SOURCES}"
+    # ${meta} is the package's real directory in THIS repo. ${root} is a temp
+    # copy, so provenance must be resolved against ${meta} or the gate finds no
+    # owning repository and fails closed.
+    [[ -f "${PACKAGE_SOURCES}" ]] && authority_flags="--package-sources ${PACKAGE_SOURCES} --package-source-root ${meta}"
     [[ -f "${PLATFORM_BASELINE}" ]] && authority_flags="${authority_flags} --platform-baseline ${PLATFORM_BASELINE}"
 
     echo "  → pkg build ${name} ${version} (${kind})..."

@@ -306,15 +306,6 @@ packages:
     skip_runtime_check: true
     bootstrap_tier: workload
 
-  - name: libnss-resolve
-    kind: command
-    binary: libnss-resolve
-    go_target: ""
-    version_source: self
-    publisher_id: core@globular.io
-    skip_runtime_check: true
-    bootstrap_tier: workload
-
   - name: sha256sum
     kind: command
     binary: sha256sum
