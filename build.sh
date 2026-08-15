@@ -41,6 +41,12 @@ OUT_DIR="${PKGS_ROOT}/dist"
 DRY_RUN=0
 PLATFORM_VERSION=""   # applied to specs that declare metadata.platform_version: true
 DEBS_DIR=""           # dir of pre-downloaded .debs for bundle_debs packages; skips apt-get
+# Release authority for packages that bundle .debs. Both live in the RELEASE
+# repo (services), not here: which source revision a release may consume, and
+# which platform its bundled debs must install on. Defaults point at the
+# release repo; override for experiments, never to skip the checks.
+PACKAGE_SOURCES="${PACKAGE_SOURCES:-${SERVICES_ROOT}/scripts/release/package-sources.json}"
+PLATFORM_BASELINE="${PLATFORM_BASELINE:-${SERVICES_ROOT}/scripts/release/platform-baseline.json}"
 RELEASE_GENERATED_NAMES="globular-cli gateway xds"
 
 while [[ $# -gt 0 ]]; do
@@ -48,6 +54,8 @@ while [[ $# -gt 0 ]]; do
         --out) OUT_DIR="$2"; shift 2 ;;
         --platform-version) PLATFORM_VERSION="$2"; shift 2 ;;
         --debs-dir) DEBS_DIR="$2"; shift 2 ;;
+        --package-sources) PACKAGE_SOURCES="$2"; shift 2 ;;
+        --platform-baseline) PLATFORM_BASELINE="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
@@ -321,17 +329,26 @@ for spec in "${PKGS_ROOT}/metadata/"*/specs/*.yaml; do
     fi
     local_scripts=""; [[ -d "${meta}/scripts" ]] && local_scripts="--scripts-dir ${meta}/scripts"
     debs_flag=""; [[ -n "${DEBS_DIR}" ]] && debs_flag="--debs-dir ${DEBS_DIR}"
+    authority_flags=""
+    [[ -f "${PACKAGE_SOURCES}" ]] && authority_flags="--package-sources ${PACKAGE_SOURCES}"
+    [[ -f "${PLATFORM_BASELINE}" ]] && authority_flags="${authority_flags} --platform-baseline ${PLATFORM_BASELINE}"
 
     echo "  → pkg build ${name} ${version} (${kind})..."
     blog="${WORK_DIR}/${name}.buildlog"
     # shellcheck disable=SC2086
     if "${GLOBULAR}" pkg build \
-            --spec "${spec}" --root "${root}" ${local_scripts} ${debs_flag} \
+            --spec "${spec}" --root "${root}" ${local_scripts} ${debs_flag} ${authority_flags} \
             --version "${version}" --publisher "core@globular.io" \
             --platform "linux_amd64" --out "${OUT_DIR}" \
             --skip-missing-config=true --skip-missing-systemd=true >"${blog}" 2>&1; then
         grep -E "^\[OK\]|manifest:" "${blog}" | head -2
         PASS=$((PASS+1))
+    elif grep -qiE "release input provenance|release input satisfiability" "${blog}"; then
+        # A release-input refusal is a REFUSAL, never a missing-asset skip. The
+        # bundle either came from bytes no revision authorizes, or cannot install
+        # on the declared baseline. Converting that into SKIP is how an
+        # unshippable package quietly stays in the release.
+        echo "  ✗ REFUSED ${name}: release input authority"; grep -v "^2026" "${blog}" | tail -12; FAIL=$((FAIL+1))
     elif grep -qiE "apt-get download|bundle_debs|Can't find a source" "${blog}"; then
         # bundle_debs needs the scylla apt repo or --debs-dir; a missing-asset
         # skip, not a build error. Provide --debs-dir on the build host.
