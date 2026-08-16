@@ -4,7 +4,12 @@
   "version": "2025.3.8",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/noop",
+  "entrypoint": "none",
+  "identity": {
+    "proof": "version",
+    "installed_path": "/usr/bin/scylla",
+    "version_probe": "scylla --version"
+  },
   "defaults": {
     "configDir": "",
     "spec": "specs/scylladb_service.yaml",

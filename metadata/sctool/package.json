@@ -1,7 +1,7 @@
 {
   "type": "command",
   "name": "sctool",
-  "version": "3.10.1",
+  "version": "3.11.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/sctool",
@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/sctool_cmd.yaml"
   },
-  "description": "CLI tool for ScyllaDB Manager cluster operations and scheduling.",
+  "description": "Scylla Manager CLI wrapper package — bundles the upstream scylla-manager-client .deb and exposes a stable sctool launcher.",
   "keywords": [
     "sctool",
     "scylla-manager",
@@ -18,6 +18,5 @@
     "backup",
     "scylladb"
   ],
-  "license": "Proprietary",
-  "entrypoint_checksum": "sha256:2faf92b4263cb002bbb6d12d6c9b44e4c27ab5c6fa7b71f6a151c70fc6301b23"
+  "license": "Proprietary"
 }

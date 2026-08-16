@@ -1,7 +1,7 @@
 {
   "type": "infrastructure",
   "name": "scylla-manager",
-  "version": "3.10.1+1",
+  "version": "3.11.1",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
   "entrypoint": "bin/scylla_manager",
@@ -9,7 +9,7 @@
     "configDir": "",
     "spec": "specs/scylla_manager_service.yaml"
   },
-  "description": "ScyllaDB Manager daemon for backup, repair, and cluster operations.",
+  "description": "ScyllaDB Manager server wrapper package — bundles the upstream scylla-manager-server .deb and runs it under Globular-managed service wiring.",
   "keywords": [
     "scylla-manager",
     "scylladb",
@@ -19,6 +19,5 @@
   ],
   "license": "Proprietary",
   "systemd_unit": "globular-scylla-manager.service",
-  "health_check_unit": "globular-scylla-manager.service",
-  "entrypoint_checksum": "sha256:c7bdac0de53df063ca59f1c9131ce94330a6861323ee5bfc024ad57f514b3df9"
+  "health_check_unit": "globular-scylla-manager.service"
 }

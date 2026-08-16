@@ -2,13 +2,20 @@ version: 1
 
 metadata:
   name: keepalived
-  version: "0.0.1"
+  version: "2.2.8"
   kind: infrastructure
   description: "VRRP-based virtual IP failover daemon for high-availability cluster networking."
   keywords: [keepalived, vrrp, failover, high-availability, vip]
   license: GPL-2.0
-  entrypoint: noop
+  entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable).
+  # Installed from the host OS package repo — the binary bytes vary by distro, so
+  # the package VERSION is the identity, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/sbin/keepalived
+    version_probe: keepalived --version
 
 steps:
   # Note: keepalived runs as root (requires privileges for VRRP and VIP management)
@@ -27,12 +34,10 @@ steps:
         group: root
         mode: 0755
 
-  # Install the noop sentinel binary (shared stub for wrapper packages like keepalived/scylladb).
-  # install_bins: true extracts bin/noop from the tgz to /usr/lib/globular/bin/noop.
   # The node-agent verifier requires this file to be present with the expected checksum.
   - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false

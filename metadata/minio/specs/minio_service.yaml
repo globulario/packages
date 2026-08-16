@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   name: minio
-  version: "0.0.1"
+  version: "RELEASE.2025-09-07T16-13-09Z"
   kind: infrastructure
   description: "S3-compatible object storage server for backup artifacts, media files, and blob data."
   keywords: [minio, object-storage, s3, backup, blob]

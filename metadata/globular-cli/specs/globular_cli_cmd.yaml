@@ -3,6 +3,7 @@ version: 1
 metadata:
   name: globular-cli
   version: "0.0.1"
+  platform_version: true
   kind: command
   description: "Globular platform CLI — bootstraps clusters, manages packages, controls services, and handles DNS."
   keywords: [globularcli, cli, cluster, package-management, bootstrap]

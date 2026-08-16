@@ -10,7 +10,7 @@
 #   binary               — entrypoint binary name
 #   go_target            — Go build path relative to golang/ (empty = third-party)
 #   systemd_unit         — systemd unit name (default: globular-{name}.service)
-#   version_source       — code (committed source version) | self (binary reports own version)
+#   version_source       — code (committed zz_version_generated.go is the version authority; see services/docs/design/package-identity-single-authority.md) | self (externally owned version)
 #   publisher_id         — artifact publisher (default: core@globular.io)
 #   control_plane_critical — true if required before workloads can start.
 #                          NON-AUTHORITATIVE OVERLAY: component_catalog (services repo) is
@@ -58,7 +58,7 @@ packages:
 
   - name: scylladb
     kind: infrastructure
-    binary: noop
+    binary: none
     go_target: ""
     systemd_unit: scylla-server.service
     version_source: self
@@ -138,7 +138,7 @@ packages:
 
   - name: keepalived
     kind: infrastructure
-    binary: noop
+    binary: none
     go_target: ""
     systemd_unit: globular-keepalived.service
     version_source: self
@@ -306,15 +306,6 @@ packages:
     skip_runtime_check: true
     bootstrap_tier: workload
 
-  - name: libnss-resolve
-    kind: command
-    binary: none
-    go_target: ""
-    version_source: self
-    publisher_id: core@globular.io
-    skip_runtime_check: true
-    bootstrap_tier: workload
-
   - name: sha256sum
     kind: command
     binary: sha256sum
@@ -335,7 +326,7 @@ packages:
 
   - name: claude
     kind: command
-    binary: noop
+    binary: none
     go_target: ""
     version_source: self
     publisher_id: core@globular.io
@@ -344,7 +335,7 @@ packages:
 
   - name: codex
     kind: command
-    binary: noop
+    binary: none
     go_target: ""
     version_source: self
     publisher_id: core@globular.io

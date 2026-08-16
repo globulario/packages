@@ -8,12 +8,18 @@ metadata:
   keywords: [codex, openai, ai, cli, llm]
   license: Apache-2.0
   # Wrapper package: the real Codex vendor tree is NOT in the payload. The
-  # payload carries only the shared `noop` sentinel (for the node-agent verifier);
   # the real CLI and adjacent resources are fetched + verified at install time by
   # scripts/install-codex.sh and live under /usr/local/lib/codex with
   # /usr/local/bin/codex as a symlink entrypoint.
-  entrypoint: noop
+  entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable). The
+  # entrypoint is a symlink into a versioned vendor tree, so a single binary sha is
+  # not the identity — the package VERSION is, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/local/bin/codex
+    version_probe: codex --version
 
 steps:
   - id: ensure-user-group
@@ -46,7 +52,7 @@ steps:
 
   - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false

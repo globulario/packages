@@ -7,8 +7,15 @@ metadata:
   description: "High-performance NoSQL database (Cassandra-compatible) for persistent service data."
   keywords: [scylladb, database, nosql, cassandra, persistence]
   license: AGPL-3.0
-  entrypoint: noop
+  entrypoint: none
   install_bins: false
+  # Declared identity (identity.has_single_canonical_source_and_is_immutable).
+  # Installed from bundled .deb files whose binary bytes vary by build — the
+  # package VERSION is the identity, verified via the live version report.
+  identity:
+    proof: version
+    installed_path: /usr/bin/scylla
+    version_probe: scylla --version
   provides_capabilities: [local-db]
   health_check:
     unit: scylla-server.service
@@ -30,11 +37,9 @@ steps:
         group: root
         mode: 0755
 
-  # install_bins: true extracts bin/noop from the tgz to /usr/lib/globular/bin/noop.
-  # ScyllaDB itself is installed via .deb below; the noop stub is the only binary payload.
   - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false

@@ -2,3 +2,10 @@
 bin/
 *.tar.gz
 *.tgz
+
+# libnss-resolve/bin/libnss-resolve is a hand-authored source marker script
+# (not a downloaded/compiled binary) — build.sh requires it on disk to compute
+# the package's entrypoint checksum. Must be checked in, unlike every other
+# package's bin/ (a download target).
+!metadata/libnss-resolve/bin/
+!metadata/libnss-resolve/bin/libnss-resolve

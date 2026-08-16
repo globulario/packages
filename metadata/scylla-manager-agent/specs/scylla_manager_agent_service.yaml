@@ -2,12 +2,17 @@ version: 1
 
 metadata:
   name: scylla_manager_agent
-  version: "3.8.1"
+  version: "3.11.1"
   kind: infrastructure
   description: "ScyllaDB Manager agent that runs on each node to execute repair and backup operations."
   keywords: [scylla-manager-agent, scylladb, agent, repair, backup]
   license: Proprietary
-  entrypoint: scylla_manager_agent
+  bundle_debs:
+    - scylla-manager-agent
+  # Wrapper package: the real binary comes from the bundled .deb, but Globular
+  # owns a stable launcher under {{.Prefix}}/bin/scylla_manager_agent.
+  entrypoint: bin/scylla_manager_agent
+  install_bins: false
 
 steps:
   - id: ensure-user-group
@@ -39,12 +44,48 @@ steps:
         group: globular
         mode: 0750
 
-  - id: install-scylla-manager-agent-binary
+  - id: install-payload
     type: install_package_payload
-    install_bins: true
+    install_bins: false
     install_config: false
     install_spec: false
     install_systemd: false
+
+  - id: prevent-scylla-manager-agent-autostart
+    type: run_script
+    script: prevent-autostart.sh
+
+  - id: install-scylla-manager-agent-debs
+    type: install_local_debs
+
+  - id: allow-scylla-manager-agent-autostart
+    type: run_script
+    script: allow-autostart.sh
+
+  - id: install-scylla-manager-agent-wrapper
+    type: install_files
+    files:
+      - path: "{{.Prefix}}/bin/scylla_manager_agent"
+        owner: root
+        group: root
+        mode: 0755
+        atomic: true
+        content: |
+          #!/bin/sh
+          set -e
+          for candidate in \
+            /usr/bin/scylla-manager-agent \
+            /opt/scylladb/scylla-manager/scylla-manager-agent \
+            /opt/scylladb/scylla-manager/bin/scylla-manager-agent \
+            /usr/lib/scylla-manager/scylla-manager-agent \
+            /usr/libexec/scylla-manager/scylla-manager-agent
+          do
+            if [ -x "$candidate" ]; then
+              exec "$candidate" "$@"
+            fi
+          done
+          echo "scylla_manager_agent wrapper: real scylla-manager-agent binary not found after installing scylla-manager-agent" >&2
+          exit 127
 
   - id: install-scylla-manager-agent-config
     type: install_files

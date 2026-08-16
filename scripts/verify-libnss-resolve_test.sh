@@ -13,7 +13,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="${ROOT}/metadata/libnss-resolve/scripts/verify-libnss-resolve.sh"
+SCRIPT="${ROOT}/fixtures/libnss-resolve/scripts/verify-libnss-resolve.sh"
 PASS=0; FAIL=0
 
 WORK="$(mktemp -d)"; trap 'rm -rf "${WORK}"' EXIT
@@ -66,7 +66,7 @@ run_case "hosts: has resolveX only"      fail "ii "  "${REAL_LIB}"              
 
 echo
 echo "== configure-nsswitch.sh =="
-CFG="${ROOT}/metadata/libnss-resolve/scripts/configure-nsswitch.sh"
+CFG="${ROOT}/fixtures/libnss-resolve/scripts/configure-nsswitch.sh"
 cfg_case() { # name inputhosts expecthosts
     printf 'passwd: files\nhosts: %s\n' "$2" > "${WORK}/c.conf"
     if NSSWITCH_CONF="${WORK}/c.conf" sh "${CFG}" >/dev/null 2>&1; then

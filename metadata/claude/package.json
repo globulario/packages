@@ -4,7 +4,12 @@
   "version": "2.1.177",
   "platform": "linux_amd64",
   "publisher": "core@globular.io",
-  "entrypoint": "bin/noop",
+  "entrypoint": "none",
+  "identity": {
+    "proof": "binary_sha256",
+    "installed_path": "/usr/local/bin/claude",
+    "checksum": "sha256:ff41753634b20c869ef6a32a20863521b33d4186ac0d6a49379ab48a48395ee7"
+  },
   "defaults": {
     "configDir": "",
     "spec": "specs/claude_cmd.yaml",

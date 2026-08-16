@@ -3,22 +3,20 @@
 
 WHY THIS EXISTS
 ---------------
-A package's identity — its binary name and its kind — is declared in up to seven
-places: registry.yaml, top-level specs/<name>_*.yaml, metadata/<name>/specs/*.yaml,
-metadata/<name>/package.json, the spec's inline systemd ExecStart, the spec's
-start_services.binaries map, and metadata/<name>/systemd/<unit>. Nothing enforced
+A package's identity — its binary name and its kind — is declared in multiple
+places: registry.yaml, metadata/<name>/specs/*.yaml, metadata/<name>/package.json,
+the spec's inline systemd ExecStart, the spec's start_services.binaries map, and
+metadata/<name>/systemd/<unit>. Nothing enforced
 that these agreed, so they drifted.
 
 The mcp binary ships as "mcp_server" (the Go build for ./mcp collides with the package
 dir name). The spec kept drifting back to "mcp" — fixed by hand 5+ times. A fresh build
 from a spec that says "mcp" produces ExecStart=/usr/lib/globular/bin/mcp, which does not
 exist, so start-services never converges and Day-0 reports "version:mcp not installed".
-The drift hid because the two spec copies (top-level specs/ vs metadata/<name>/specs/)
-disagreed: the build read one, the fix landed in the other.
 
-This gate is LAYOUT-AGNOSTIC: it checks EVERY spec file that exists, wherever it lives,
-plus package.json, awareness.yaml, and the systemd unit, against registry.yaml.
-registry.yaml is the SOLE author of kind; this gate is source-vs-mirror. The former
+This gate checks every metadata-local spec plus package.json, awareness.yaml, and the
+systemd unit against registry.yaml. registry.yaml is the SOLE author of kind; this gate
+is source-vs-mirror. The former
 CATALOG_KIND photocopy (a hand-mirror of component_catalog.go) was REMOVED (Slice 2) —
 the registry↔component_catalog kind agreement is enforced services-side by
 `make check-package-kinds` + package_kind_registry_consistency_test.go, not duplicated here.
@@ -36,8 +34,6 @@ import json
 import os
 import re
 import sys
-import filecmp
-
 import yaml
 
 VALID_KINDS = {"service", "infrastructure", "command", "application"}
@@ -55,6 +51,62 @@ VALID_KINDS = {"service", "infrastructure", "command", "application"}
 
 EXECSTART_BIN_RE = re.compile(r"ExecStart\s*=\s*\S*?/bin/([A-Za-z0-9_.-]+)")
 PKILL_X_RE = re.compile(r"pkill\b[^\n]*?-x\s+([A-Za-z0-9_.-]+)")
+
+# Identity proof (invariant identity.has_single_canonical_source_and_is_immutable +
+# forbidden_fix:recompute_identity_from_secondary_source): every package must carry a
+# stable, DECLARED, verifiable identity — never a silent empty checksum that a
+# reader would "recover" by hashing whatever is on disk. Shipped-binary packages
+# carry it implicitly (entrypoint + build-computed entrypoint_checksum). A package
+# whose entrypoint is "none" (noop: curl/wrapper, .deb, OS-repo) installs a binary
+# the build never sees, so it MUST declare an explicit identity{} block naming the
+# proof mode:
+#   binary_sha256 — a pinned sha256 of the installed entrypoint at a fixed path
+#                   (the node-agent re-hashes the path and compares). Requires
+#                   `checksum` (sha256) + absolute `installed_path`.
+#   version       — the package version IS the identity (vendor tree/symlink or an
+#                   OS/deb binary whose bytes vary by distro); verified via the
+#                   runtime's own version report. Requires a non-empty version.
+VALID_IDENTITY_PROOFS = {"binary_sha256", "version"}
+SHA256_RE = re.compile(r"^(sha256:)?[0-9a-f]{64}$")
+
+
+def check_identity(errors, name, pj):
+    entrypoint = (pj.get("entrypoint") or "").strip().lower()
+    ident = pj.get("identity")
+    if entrypoint and entrypoint != "none":
+        # Shipped-binary package: identity is the entrypoint binary + its
+        # build-computed checksum. An explicit identity{} block is optional, but if
+        # present it must agree (binary_sha256).
+        if isinstance(ident, dict):
+            proof = (ident.get("proof") or "").strip()
+            if proof and proof != "binary_sha256":
+                fail(errors, f"{name}: entrypoint='{entrypoint}' is a shipped binary but "
+                             f"identity.proof='{proof}' — must be 'binary_sha256'.")
+        return
+    # entrypoint is "none"/absent → noop package: an explicit identity{} block is REQUIRED.
+    if not isinstance(ident, dict):
+        fail(errors, f"{name}: entrypoint 'none' but no identity{{}} block declared. Every "
+                     f"package needs a stable, verifiable identity — declare identity.proof "
+                     f"(binary_sha256 | version). A missing identity is the empty-checksum hole "
+                     f"that lets applied_hash validation silently pass on nothing "
+                     f"(identity.has_single_canonical_source_and_is_immutable).")
+        return
+    proof = (ident.get("proof") or "").strip()
+    if proof not in VALID_IDENTITY_PROOFS:
+        fail(errors, f"{name}: identity.proof='{proof}' invalid — must be one of "
+                     f"{sorted(VALID_IDENTITY_PROOFS)}.")
+        return
+    if proof == "binary_sha256":
+        cksum = (ident.get("checksum") or "").strip()
+        if not SHA256_RE.match(cksum):
+            fail(errors, f"{name}: identity.proof=binary_sha256 requires a non-empty sha256 "
+                         f"`checksum` (got '{cksum}'). It must equal sha256(installed binary).")
+        if not (ident.get("installed_path") or "").strip().startswith("/"):
+            fail(errors, f"{name}: identity.proof=binary_sha256 requires an absolute "
+                         f"`installed_path` the node-agent can re-hash.")
+    elif proof == "version":
+        if not (pj.get("version") or "").strip():
+            fail(errors, f"{name}: identity.proof=version requires a non-empty package version.")
 
 
 def fail(errors, msg):
@@ -145,9 +197,9 @@ def main():
         if reg["kind"] and reg["kind"] not in VALID_KINDS:
             fail(errors, f"{name}: registry.yaml kind '{reg['kind']}' is not valid {sorted(VALID_KINDS)}")
 
-    # Every spec file, wherever it lives (top-level specs/ AND metadata/*/specs/),
-    # is checked against registry by its own declared metadata.name.
-    spec_dirs = [os.path.join(repo_root, "specs")]
+    # Every metadata-local spec is checked against registry by its own declared
+    # metadata.name.
+    spec_dirs = []
     meta_root = os.path.join(repo_root, "metadata")
     if os.path.isdir(meta_root):
         for name in sorted(os.listdir(meta_root)):
@@ -175,6 +227,7 @@ def main():
             pj_path = os.path.join(meta_root, name, "package.json")
             if os.path.isfile(pj_path):
                 pj = json.load(open(pj_path))
+                check_identity(errors, name, pj)
                 if want_bin:
                     check_binary(errors, name, "package.json.entrypoint",
                                  os.path.basename((pj.get("entrypoint") or "").strip()), want_bin)
@@ -184,18 +237,10 @@ def main():
                                  f"vs registry.yaml kind='{want_kind}'.")
                 spec_rel = (pj.get("defaults") or {}).get("spec") or ""
                 if spec_rel:
-                    root_spec = os.path.join(repo_root, spec_rel)
                     metadata_spec = os.path.join(meta_root, name, spec_rel)
-                    if not os.path.isfile(root_spec):
-                        fail(errors, f"{name}: package.json defaults.spec='{spec_rel}' but root spec is missing.\n"
-                                     f"      Root specs are build inputs; add {spec_rel} or fix package.json.")
                     if not os.path.isfile(metadata_spec):
                         fail(errors, f"{name}: package.json defaults.spec='{spec_rel}' but metadata-local spec is missing.\n"
                                      f"      Expected {os.path.relpath(metadata_spec, repo_root)}.")
-                    if os.path.isfile(root_spec) and os.path.isfile(metadata_spec) and not filecmp.cmp(root_spec, metadata_spec, shallow=False):
-                        fail(errors, f"{name}: spec mirror drift — {spec_rel} differs from "
-                                     f"{os.path.relpath(metadata_spec, repo_root)}.\n"
-                                     f"      Root specs and metadata-local specs must be synchronized.")
             # awareness.yaml package_kind mirror (copy #3) — gated against registry.
             aw_path = os.path.join(meta_root, name, "awareness.yaml")
             if os.path.isfile(aw_path):
